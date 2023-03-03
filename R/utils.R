@@ -177,10 +177,11 @@ collect_results <- function(folders) {
       # one heatmap per view
       maps <- views %>%
         furrr::future_map_dfr(function(view) {
-          all.importances <- targets %>% purrr::map(~ readr::read_csv(paste0(
-            sample, .Platform$file.sep, "importances_", .x, "_", view, ".txt"
-          ),
-          col_types = readr::cols()
+          all.importances <- targets %>% purrr::map(~ readr::read_csv(
+            paste0(
+              sample, .Platform$file.sep, "importances_", .x, "_", view, ".txt"
+            ),
+            col_types = readr::cols()
           ) %>%
             dplyr::distinct() %>%
             dplyr::rename(feature = target))
@@ -199,18 +200,18 @@ collect_results <- function(folders) {
           # and multiplied by 1-pval(view)
           all.importances %>%
             purrr::imap_dfc(~
-            tibble::tibble(feature = features, zero.imp = 0) %>%
-              dplyr::left_join(.x, by = "feature") %>%
-              dplyr::arrange(feature) %>%
-              dplyr::mutate(
-                imp = scale(imp)[, 1],
-                !!targets[.y] := zero.imp + (imp *
-                  (pvalues %>%
-                    dplyr::filter(target == targets[.y]) %>%
-                    dplyr::pull(value)))
-              )
-              %>%
-              dplyr::select(targets[.y])) %>%
+              tibble::tibble(feature = features, zero.imp = 0) %>%
+                dplyr::left_join(.x, by = "feature") %>%
+                dplyr::arrange(feature) %>%
+                dplyr::mutate(
+                  imp = scale(imp)[, 1],
+                  !!targets[.y] := zero.imp + (imp *
+                    (pvalues %>%
+                      dplyr::filter(target == targets[.y]) %>%
+                      dplyr::pull(value)))
+                )
+                %>%
+                dplyr::select(targets[.y])) %>%
             dplyr::mutate(Predictor = features) %>%
             tidyr::pivot_longer(
               names_to = "Target",
@@ -262,9 +263,10 @@ aggregate_results_subset <- function(misty.results, folders) {
 
   normalized.folders <- R.utils::getAbsolutePath(folders)
   # check if folders are in names of misty.results
-  assertthat::assert_that(all(normalized.folders %in%
-    (misty.results$importances %>% dplyr::pull(sample))),
-  msg = "The provided results list doesn't contain information about some of
+  assertthat::assert_that(
+    all(normalized.folders %in%
+      (misty.results$importances %>% dplyr::pull(sample))),
+    msg = "The provided results list doesn't contain information about some of
     the requested result folders. Consider using collect_results()."
   )
 
@@ -365,6 +367,8 @@ sweep_cache <- function() {
 #'
 #' @inheritParams plot_interaction_heatmap
 #' @param type type of signature to extract from the results.
+#' @param intersect.targets a \code{logical} indicating whether to return a
+#' signature consisting of the intersection of targets present in all samples
 #'
 #' @return A table with one row per sample from \code{misty.results} representing
 #' its signature.
@@ -386,7 +390,7 @@ extract_signature <- function(misty.results,
                               ), trim = -Inf, trim.measure = c(
                                 "gain.R2", "multi.R2", "intra.R2",
                                 "gain.RMSE", "multi.RMSE", "intra.RMSE"
-                              )) {
+                              ), intersect.targets = TRUE) {
   signature.type <- match.arg(type)
 
   trim.measure.type <- match.arg(trim.measure)
@@ -413,12 +417,16 @@ extract_signature <- function(misty.results,
 
   switch(signature.type,
     "performance" = {
-      target.intersection <- misty.results$improvements %>%
-        dplyr::group_by(sample) %>%
-        dplyr::summarize(ts = list(unique(target))) %>%
-        dplyr::pull(ts) %>%
-        purrr::reduce(intersect) %>%
-        intersect(targets)
+      target.intersection <- if (intersect.targets) {
+        misty.results$improvements %>%
+          dplyr::group_by(sample) %>%
+          dplyr::summarize(ts = list(unique(target))) %>%
+          dplyr::pull(ts) %>%
+          purrr::reduce(intersect) %>%
+          intersect(targets)
+      } else {
+        targets
+      }
 
       misty.results$improvements %>%
         dplyr::filter(
@@ -433,12 +441,16 @@ extract_signature <- function(misty.results,
         dplyr::ungroup()
     },
     "contribution" = {
-      target.intersection <- misty.results$contributions %>%
-        dplyr::group_by(sample) %>%
-        dplyr::summarize(ts = list(unique(target))) %>%
-        dplyr::pull(ts) %>%
-        purrr::reduce(intersect) %>%
-        intersect(targets)
+      target.intersection <- if (intersect.targets) {
+        misty.results$contributions %>%
+          dplyr::group_by(sample) %>%
+          dplyr::summarize(ts = list(unique(target))) %>%
+          dplyr::pull(ts) %>%
+          purrr::reduce(intersect) %>%
+          intersect(targets)
+      } else {
+        targets
+      }
 
       misty.results$contributions %>%
         dplyr::filter(
@@ -461,17 +473,27 @@ extract_signature <- function(misty.results,
         purrr::map(function(view) {
           view.importances <- misty.results$importances %>%
             dplyr::filter(view == !!view, !is.na(Importance))
-          target.intersection <- view.importances %>%
-            dplyr::group_by(sample) %>%
-            dplyr::summarize(ts = list(unique(Target))) %>%
-            dplyr::pull(ts) %>%
-            purrr::reduce(intersect) %>%
-            intersect(targets)
-          predictor.intersection <- view.importances %>%
-            dplyr::group_by(sample) %>%
-            dplyr::summarize(ts = list(unique(Predictor))) %>%
-            dplyr::pull(ts) %>%
-            purrr::reduce(intersect)
+          target.intersection <- if (intersect.targets) {
+            view.importances %>%
+              dplyr::group_by(sample) %>%
+              dplyr::summarize(ts = list(unique(Target))) %>%
+              dplyr::pull(ts) %>%
+              purrr::reduce(intersect) %>%
+              intersect(targets)
+          } else {
+            targets
+          }
+          predictor.intersection <- if (intersect.targets) {
+            view.importances %>%
+              dplyr::group_by(sample) %>%
+              dplyr::summarize(ts = list(unique(Predictor))) %>%
+              dplyr::pull(ts) %>%
+              purrr::reduce(intersect)
+          } else {
+            view.importances %>%
+              dplyr::pull(Predictor) %>%
+              unique()
+          }
 
           view.importances %>%
             dplyr::filter(
@@ -499,7 +521,7 @@ merge_two <- function(l1, l2) {
   n1_list <- diff %>%
     purrr::set_names() %>%
     purrr::map(function(name) l1[[name]])
-  
+
   union <- n2[!(n2 %in% diff)]
   n2_list <- union %>%
     purrr::set_names() %>%
