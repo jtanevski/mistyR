@@ -1,4 +1,8 @@
 # mistyR 1.7.x
+- Enable signature extraction without intersecting targets.
+- Sliding MISTy
+
+# mistyR 1.6.1
 
 - Discontinue the use of .data due to its deprecation since tidyselect 1.2.0.
 - Update minimum required versions for some tidyverse related packages due to function deprecation.
@@ -8,6 +12,7 @@
 - Release version for Bioconductor 3.16. See changes for 1.5.x.
 
 # mistyR 1.5.x
+
 - Added different modeling functions. Might not be completely backwards compatible!
 
 # mistyR 1.4.0

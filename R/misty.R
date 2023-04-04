@@ -2,7 +2,7 @@
 # Copyleft (ɔ) 2020 Jovan Tanevski [jovan.tanevski@uni-heidelberg.de]
 
 
-#' @importFrom rlang !! := .data
+#' @importFrom rlang !! :=
 .onAttach <- function(libname, pkgname) {
   packageStartupMessage("mistyR is able to run computationally intensive functions
   in parallel. Please consider specifying a future::plan(). For example by running
@@ -30,54 +30,54 @@ utils::globalVariables("where")
 #' set to \code{TRUE}.
 #'
 #' \emph{Default} model to train the view-specific views is a Random Forest model
-#' based on \code{\link[ranger]{ranger}()} --  
+#' based on \code{\link[ranger]{ranger}()} --
 #' \code{run_misty(views, model.function = random_forest_model)}
-#'   
+#'
 #' The following parameters are the default
 #' configuration: \code{num.trees = 100}, \code{importance = "impurity"},
 #' \code{num.threads = 1}, \code{seed = seed}.
-#' 
-#' \emph{Gradient boosting} is an alternative to model each view using gradient 
+#'
+#' \emph{Gradient boosting} is an alternative to model each view using gradient
 #' boosting. The algorithm is based on \code{\link[xgboost]{xgb.train}()} --
-#'  \code{run_misty(views, model.function = gradient_boosting_model)} 
-#' 
+#'  \code{run_misty(views, model.function = gradient_boosting_model)}
+#'
 #' The following parameters are the default configuration: \code{booster = "gbtree"},
 #' \code{rounds = 10}, \code{objective = "reg:squarederror"}. Set \code{booster}
 #' to \code{"gblinear"} for linear boosting.
-#' 
+#'
 #' \emph{Bagged MARS} is an alternative to model each view using bagged MARS,
-#' (multivariate adaptive spline regression models) trained with 
-#' bootstrap aggregation samples. The algorithm is based on 
+#' (multivariate adaptive spline regression models) trained with
+#' bootstrap aggregation samples. The algorithm is based on
 #' \code{\link[earth]{earth}()} --
 #' \code{run_misty(views, model.function = bagged_mars_model)}
-#' 
+#'
 #' The following parameters are the default configuration: \code{degree = 2}.
 #' Furthermore 50 base learners are used by default (pass \code{n.bags} as
 #' parameter via \code{...} to change this value).
 #'
-#' \emph{MARS} is an alternative to model each view using 
-#' multivariate adaptive spline regression model. The algorithm is based on 
+#' \emph{MARS} is an alternative to model each view using
+#' multivariate adaptive spline regression model. The algorithm is based on
 #' \code{\link[earth]{earth}()} --
 #' \code{run_misty(views, model.function = mars_model)}
-#' 
+#'
 #' The following parameters are the default configuration: \code{degree = 2}.
-#' 
+#'
 #' \emph{Linear model} is an alternative to model each view using a simple linear
 #' model. The algorithm is based on \code{\link[stats]{lm}()} --
 #' \code{run_misty(views, model.function = linear_model)}
-#' 
-#' \emph{SVM} is an alternative to model each view using a support vector 
+#'
+#' \emph{SVM} is an alternative to model each view using a support vector
 #' machines. The algorithm is based on \code{\link[kernlab]{ksvm}()} --
 #' \code{run_misty(views, model.function = svm_model)}
-#' 
-#' The following parameters are the default configuration: \code{kernel = "vanilladot"} 
+#'
+#' The following parameters are the default configuration: \code{kernel = "vanilladot"}
 #' (linear kernel), \code{C = 1}, \code{type = "eps-svr"}.
-#' 
+#'
 #' \emph{MLP} is an alternative to model each view using a multi-layer perceptron.
 #' The alogorithm is based on \code{\link[RSNNS]{mlp}()} --
 #' \code{run_misty(views, model.function = mlp_model)}
-#' 
-#' The following parameters are the default configuration: \code{size = c(10)} 
+#'
+#' The following parameters are the default configuration: \code{size = c(10)}
 #' (meaning we have 1 hidden layer with 10 units).
 #'
 #'
@@ -102,7 +102,7 @@ utils::globalVariables("where")
 #'     \code{mars_model}, \code{linear_model},
 #'     \code{svm_model}, \code{mlp_model}
 #' @param ... all additional parameters are passed to the chosen ML model for
-#' training the view-specific models 
+#' training the view-specific models
 #'
 #' @return Path to the results folder that can be passed to
 #'     \code{\link{collect_results}()}.
@@ -130,13 +130,13 @@ utils::globalVariables("where")
 #' @export
 run_misty <- function(views, results.folder = "results", seed = 42,
                       target.subset = NULL, bypass.intra = FALSE, cv.folds = 10,
-                      cached = FALSE, append = FALSE, 
+                      cached = FALSE, append = FALSE,
                       model.function = random_forest_model, ...) {
-
   model.name <- as.character(rlang::enexpr(model.function))
-  
-  if(!exists(model.name, envir = globalenv()))
+
+  if (!exists(model.name, envir = globalenv())) {
     model.function <- utils::getFromNamespace(model.name, "mistyR")
+  }
 
   normalized.results.folder <- R.utils::getAbsolutePath(results.folder)
 
@@ -236,14 +236,15 @@ run_misty <- function(views, results.folder = "results", seed = 42,
 
   message("\nTraining models")
   targets %>% furrr::future_map_chr(function(target, ...) {
-    
-    target.model <- build_model(views = views, target = target, 
-                                model.function = model.function,
-                                model.name = model.name,
-                                cv.folds = cv.folds,
-                                bypass.intra = bypass.intra,
-                                seed = seed, cached = cached, ...)
-    
+    target.model <- build_model(
+      views = views, target = target,
+      model.function = model.function,
+      model.name = model.name,
+      cv.folds = cv.folds,
+      bypass.intra = bypass.intra,
+      seed = seed, cached = cached, ...
+    )
+
     combined.views <- target.model[["meta.model"]]
 
     model.lm <- methods::is(combined.views, "lm")
@@ -260,7 +261,7 @@ run_misty <- function(views, results.folder = "results", seed = 42,
             tibble::rownames_to_column("views"),
           by = "views"
         ) %>%
-        dplyr::pull(.data$p) %>%
+        dplyr::pull(p) %>%
         tidyr::replace_na(1)
 
       if (bypass.intra) append(pvals[-1], c(NA, 1), 0) else c(NA, pvals)
@@ -327,11 +328,12 @@ run_misty <- function(views, results.folder = "results", seed = 42,
 
     performance.summary <- c(
       performance.estimate %>% colMeans(),
-      tryCatch(stats::t.test(performance.estimate %>%
-        dplyr::pull(.data$intra.RMSE),
-      performance.estimate %>%
-        dplyr::pull(.data$multi.RMSE),
-      alternative = "greater"
+      tryCatch(stats::t.test(
+        performance.estimate %>%
+          dplyr::pull(intra.RMSE),
+        performance.estimate %>%
+          dplyr::pull(multi.RMSE),
+        alternative = "greater"
       )$p.value, error = function(e) {
         warning.message <- paste(
           "t-test of RMSE performance failed with error:",
@@ -340,11 +342,12 @@ run_misty <- function(views, results.folder = "results", seed = 42,
         warning(warning.message)
         1
       }),
-      tryCatch(stats::t.test(performance.estimate %>%
-        dplyr::pull(.data$intra.R2),
-      performance.estimate %>%
-        dplyr::pull(.data$multi.R2),
-      alternative = "less"
+      tryCatch(stats::t.test(
+        performance.estimate %>%
+          dplyr::pull(intra.R2),
+        performance.estimate %>%
+          dplyr::pull(multi.R2),
+        alternative = "less"
       )$p.value, error = function(e) {
         warning.message <- paste(
           "t-test of R2 performance failed with error:",
@@ -366,4 +369,87 @@ run_misty <- function(views, results.folder = "results", seed = 42,
   }, ..., .progress = TRUE, .options = furrr::furrr_options(seed = TRUE))
 
   return(normalized.results.folder)
+}
+
+
+#' Train sliding MISTy models
+#'
+#' Train local MISTy models by sliding a window across the sample as captured by the
+#' view composition.
+#'
+#' @param views view composition.
+#' @param positions a \code{data.frame}, \code{tibble} or a \code{matrix}
+#'     with named coordinates in columns and rows for each spatial unit ordered
+#'     as in the intraview.
+#' @param window size of the
+#' @param overlap overlap of consecutive windows (percentage).
+#' @param results.folder path to the top level folder to store raw results.
+#' @param minu minimum number of spatial units in the window.
+#' @param minm minimum number of non-constant markers in the window.
+#' @param ... all other parameters are passed to \code{\link{run_misty}()}.
+#'
+#' @return Path to the result folder(s) that can be passed to
+#'     \code{\link{collect_results}()}.
+#'
+#' @examples
+#' #TODO
+#' 
+#' @export
+run_sliding_misty <- function(views, positions, window, overlap = 50,
+                              results.folder = "results", minu = 100, minm = 10,
+                              ...) {
+  x <- tibble::tibble(
+    xl = seq(
+      min(positions[, 1]),
+      max(positions[, 1]),
+      window - window * overlap / 100
+    ),
+    xu = xl + window
+  ) %>%
+    dplyr::filter(xl < max(positions[, 1])) %>%
+    dplyr::mutate(xu = pmin(xu, max(positions[, 1]))) %>%
+    round(2)
+
+  y <- tibble::tibble(
+    yl = seq(
+      min(positions[, 2]),
+      max(positions[, 2]),
+      window - window * overlap / 100
+    ),
+    yu = yl + window
+  ) %>%
+    dplyr::filter(yl < max(positions[, 2])) %>%
+    dplyr::mutate(yu = pmin(yu, max(positions[, 2]))) %>%
+    round(2)
+
+  tiles <- tidyr::expand_grid(x, y)
+
+  # make nested plan here with sequential at the second level
+  # retrieve current plan by simply running plan() without parameters
+  old.plan <- future::plan()
+  future::plan(list(old.plan, future::sequential))
+  message("\nSliding")
+  tiles %>% furrr::future_pwalk(\(xl, xu, yl, yu){
+    selected.rows <- which(
+      positions[, 1] >= xl & positions[, 1] <= xu &
+        positions[, 2] >= yl & positions[, 2] <= yu
+    )
+
+    if (length(selected.rows) >= minu) {
+      filtered.views <- views %>%
+        filter_views(selected.rows) %>%
+        select_markers("intraview", where(~ (stats::sd(.) > 0)))
+
+      if (ncol(filtered.views[["intraview"]]$data) > minm) {
+        suppressMessages(run_misty(
+          filtered.views,
+          paste0(results.folder, "/", xl, "_", yl, "_", xu, "_", yu),
+          ...
+        ))
+      }
+    }
+  }, .progress = TRUE)
+
+  future::plan(old.plan)
+  return(list.dirs(results.folder)[-1])
 }

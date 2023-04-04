@@ -9,7 +9,8 @@ extract_signature(
   type = c("performance", "contribution", "importance"),
   trim = -Inf,
   trim.measure = c("gain.R2", "multi.R2", "intra.R2", "gain.RMSE", "multi.RMSE",
-    "intra.RMSE")
+    "intra.RMSE"),
+  intersect.targets = TRUE
 )
 }
 \arguments{
@@ -22,6 +23,9 @@ extract_signature(
 below (otherwise) this value only.}
 
 \item{trim.measure}{the measure used for trimming.}
+
+\item{intersect.targets}{a \code{logical} indicating whether to return a
+signature consisting of the intersection of targets present in all samples}
 }
 \value{
 A table with one row per sample from \code{misty.results} representing
