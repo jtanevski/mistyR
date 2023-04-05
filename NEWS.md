@@ -1,4 +1,4 @@
-# mistyR 1.7.x
+# mistyR 1.99.x
 - Enable signature extraction without intersecting targets.
 - Sliding MISTy
 
