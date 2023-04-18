@@ -43,6 +43,6 @@ Train local MISTy models by sliding a window across the sample as captured by th
 view composition.
 }
 \examples{
-#TODO
+# TODO
 
 }

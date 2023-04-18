@@ -11,6 +11,7 @@ run_misty(
   target.subset = NULL,
   bypass.intra = FALSE,
   cv.folds = 10,
+  cv.strict = FALSE,
   cached = FALSE,
   append = FALSE,
   model.function = random_forest_model,
@@ -31,7 +32,10 @@ models will be trained for markers in the intraview.}
 model using the intraview data (see Details).}
 
 \item{cv.folds}{number of cross-validation folds to consider for estimating
-the performance of the multi-view models}
+the performance of the multi-view models.}
+
+\item{cv.strict}{a \code{logical} indicating whether to drop markers that have
+less than \code{cv.fold} unique values.}
 
 \item{cached}{a \code{logical} indicating whether to cache the trained models
 and to reuse previously cached ones if they already exist for this sample.}
@@ -45,10 +49,10 @@ parameters.}
 model is \code{random_forest_model}. Other models included in mistyR are
 \code{gradient_boosting_model}, \code{bagged_mars_model},
 \code{mars_model}, \code{linear_model},
-\code{svm_model}, \code{mlp_model}}
+\code{svm_model}, \code{mlp_model}.}
 
 \item{...}{all additional parameters are passed to the chosen ML model for
-training the view-specific models}
+training the view-specific models.}
 }
 \value{
 Path to the results folder that can be passed to

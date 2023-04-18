@@ -89,7 +89,9 @@ utils::globalVariables("where")
 #' @param bypass.intra a \code{logical} indicating whether to train a baseline
 #'     model using the intraview data (see Details).
 #' @param cv.folds number of cross-validation folds to consider for estimating
-#'     the performance of the multi-view models
+#'     the performance of the multi-view models.
+#' @param cv.strict a \code{logical} indicating whether to drop markers that have
+#'     less than \code{cv.fold} unique values.
 #' @param cached a \code{logical} indicating whether to cache the trained models
 #'     and to reuse previously cached ones if they already exist for this sample.
 #' @param append a \code{logical} indicating whether to append the performance
@@ -100,9 +102,9 @@ utils::globalVariables("where")
 #'     model is \code{random_forest_model}. Other models included in mistyR are
 #'     \code{gradient_boosting_model}, \code{bagged_mars_model},
 #'     \code{mars_model}, \code{linear_model},
-#'     \code{svm_model}, \code{mlp_model}
+#'     \code{svm_model}, \code{mlp_model}.
 #' @param ... all additional parameters are passed to the chosen ML model for
-#' training the view-specific models
+#' training the view-specific models.
 #'
 #' @return Path to the results folder that can be passed to
 #'     \code{\link{collect_results}()}.
@@ -130,23 +132,28 @@ utils::globalVariables("where")
 #' @export
 run_misty <- function(views, results.folder = "results", seed = 42,
                       target.subset = NULL, bypass.intra = FALSE, cv.folds = 10,
-                      cached = FALSE, append = FALSE,
-                      model.function = random_forest_model, ...) {
+                      cv.strict = FALSE, cached = FALSE, append = FALSE,
+                      model.function = random_forest_model,
+                      ...) {
   model.name <- as.character(rlang::enexpr(model.function))
 
   if (!exists(model.name, envir = globalenv())) {
     model.function <- utils::getFromNamespace(model.name, "mistyR")
   }
 
-  normalized.results.folder <- R.utils::getAbsolutePath(results.folder)
-
-  if (!dir.exists(normalized.results.folder)) {
-    dir.create(normalized.results.folder, recursive = TRUE)
-  }
-
   on.exit(sweep_cache())
 
-  view.abbrev <- views %>%
+  clean.views <- views %>%
+    select_markers(
+      "intraview",
+      where(~ (stats::sd(.) > 0))
+    ) %>%
+    select_markers(
+      "intraview",
+      where(~ (length(unique(.)) >= ifelse(cv.strict, cv.folds, 1)))
+    )
+
+  view.abbrev <- clean.views %>%
     rlist::list.remove(c("misty.uniqueid")) %>%
     purrr::map_chr(~ .x[["abbrev"]])
 
@@ -157,40 +164,33 @@ run_misty <- function(views, results.folder = "results", seed = 42,
     .sep = " "
   )
 
-  expr <- views[["intraview"]][["data"]]
+  expr <- clean.views[["intraview"]][["data"]]
 
-  assertthat::assert_that(nrow(expr) >= cv.folds,
-    msg = "The data has less rows than the requested number of cv folds."
+  check.cv <- assertthat::see_if(nrow(expr) >= cv.folds,
+    msg = "The data has less rows than the requested number of cv folds. Stopping."
   )
+
+  if (!check.cv) {
+    warning(attr(check.cv, "msg"))
+    return(NULL)
+  }
+
+  check.var <- assertthat::see_if(ncol(expr) >= 1,
+    msg = "The intraview doesn't contain any relevant information that can be modeled. Stopping."
+  )
+
+  if (!check.var) {
+    warning(attr(check.var, "msg"))
+    return(NULL)
+  }
+
+  normalized.results.folder <- R.utils::getAbsolutePath(results.folder)
+
+  if (!dir.exists(normalized.results.folder)) {
+    dir.create(normalized.results.folder, recursive = TRUE)
+  }
 
   if (ncol(expr) == 1) bypass.intra <- TRUE
-
-  target.var <- apply(expr, 2, stats::sd, na.rm = TRUE)
-
-  assertthat::assert_that(!any(target.var == 0),
-    msg = paste(
-      "Targets",
-      paste(names(which(target.var == 0)),
-        collapse = ", "
-      ),
-      "have zero variance (they are noninformative). Remove them to proceed."
-    )
-  )
-
-  target.unique <- colnames(expr) %>%
-    purrr::set_names() %>%
-    purrr::map_int(~ length(unique(expr %>% dplyr::pull(.x))))
-
-  if (any(target.unique < cv.folds)) {
-    msg <- paste(
-      "Targets",
-      paste(names(which(target.unique < cv.folds)),
-        collapse = ", "
-      ),
-      "have fewer unique values than cv.folds. This might result in errors during modeling."
-    )
-    warning(msg)
-  }
 
   coef.file <- paste0(
     normalized.results.folder, .Platform$file.sep,
@@ -237,7 +237,7 @@ run_misty <- function(views, results.folder = "results", seed = 42,
   message("\nTraining models")
   targets %>% furrr::future_map_chr(function(target, ...) {
     target.model <- build_model(
-      views = views, target = target,
+      views = clean.views, target = target,
       model.function = model.function,
       model.name = model.name,
       cv.folds = cv.folds,
@@ -392,8 +392,8 @@ run_misty <- function(views, results.folder = "results", seed = 42,
 #'     \code{\link{collect_results}()}.
 #'
 #' @examples
-#' #TODO
-#' 
+#' # TODO
+#'
 #' @export
 run_sliding_misty <- function(views, positions, window, overlap = 50,
                               results.folder = "results", minu = 100, minm = 10,
@@ -437,18 +437,15 @@ run_sliding_misty <- function(views, positions, window, overlap = 50,
 
     if (length(selected.rows) >= minu) {
       filtered.views <- views %>%
-        filter_views(selected.rows) %>%
-        select_markers("intraview", where(~ (stats::sd(.) > 0)))
+        filter_views(selected.rows)
 
-      if (ncol(filtered.views[["intraview"]]$data) > minm) {
-        suppressMessages(run_misty(
-          filtered.views,
-          paste0(results.folder, "/", xl, "_", yl, "_", xu, "_", yu),
-          ...
-        ))
-      }
+      suppressMessages(run_misty(
+        filtered.views,
+        paste0(results.folder, "/", xl, "_", yl, "_", xu, "_", yu),
+        ...
+      ))
     }
-  }, .progress = TRUE)
+  }, .progress = TRUE, .options = furrr::furrr_options(seed = TRUE))
 
   future::plan(old.plan)
   return(list.dirs(results.folder)[-1])
