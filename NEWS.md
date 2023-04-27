@@ -1,6 +1,11 @@
 # mistyR 1.99.x
+
 - Enable signature extraction without intersecting targets.
 - Sliding MISTy
+
+# mistyR 1.8.0
+
+- Release version for Bioconductor 3.17.
 
 # mistyR 1.6.1
 
