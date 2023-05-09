@@ -11,7 +11,6 @@ run_sliding_misty(
   overlap = 50,
   results.folder = "results",
   minu = 100,
-  minm = 10,
   ...
 )
 }
@@ -29,8 +28,6 @@ as in the intraview.}
 \item{results.folder}{path to the top level folder to store raw results.}
 
 \item{minu}{minimum number of spatial units in the window.}
-
-\item{minm}{minimum number of non-constant markers in the window.}
 
 \item{...}{all other parameters are passed to \code{\link{run_misty}()}.}
 }

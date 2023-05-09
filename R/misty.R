@@ -385,7 +385,6 @@ run_misty <- function(views, results.folder = "results", seed = 42,
 #' @param overlap overlap of consecutive windows (percentage).
 #' @param results.folder path to the top level folder to store raw results.
 #' @param minu minimum number of spatial units in the window.
-#' @param minm minimum number of non-constant markers in the window.
 #' @param ... all other parameters are passed to \code{\link{run_misty}()}.
 #'
 #' @return Path to the result folder(s) that can be passed to
@@ -396,7 +395,7 @@ run_misty <- function(views, results.folder = "results", seed = 42,
 #'
 #' @export
 run_sliding_misty <- function(views, positions, window, overlap = 50,
-                              results.folder = "results", minu = 100, minm = 10,
+                              results.folder = "results", minu = 100,
                               ...) {
   x <- tibble::tibble(
     xl = seq(
