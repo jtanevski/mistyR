@@ -169,7 +169,7 @@ collect_results <- function(db.file, sample.pattern = ".") {
       unique()
 
 
-    views %>% furrr::future_map_dfr(function(v) {
+    views %>% purrr::map_dfr(function(v) {
       pvalues <- contributions %>%
         dplyr::filter(sample == s, view == paste0("p.", v)) %>%
         dplyr::mutate(value = 1 - value)
@@ -177,19 +177,32 @@ collect_results <- function(db.file, sample.pattern = ".") {
       target.pvalues <- pvalues %>% dplyr::pull(value)
       names(target.pvalues) <- pvalues %>% dplyr::pull(target)
 
+      predictors <- raw.importances %>%
+        dplyr::filter(view == v) %>%
+        dplyr::pull(Predictor) %>%
+        unique()
+
       targets <- raw.importances %>%
         dplyr::filter(sample == s, view == v) %>%
         dplyr::pull(Target) %>%
         unique()
 
-      raw.importances %>%
-        dplyr::filter(sample == s, view == v) %>%
-        dplyr::group_by(Target) %>%
-        dplyr::mutate(Importance = scale(Importance)[, 1] *
-          target.pvalues[dplyr::cur_group_id()]) %>%
-        dplyr::ungroup()
+      targets %>% purrr::map_dfr(function(t) {
+        dummy.tibble <- tibble::tibble(
+          sample = s, view = v,
+          Predictor = predictors, Target = t
+        )
+        raw.importances %>%
+          dplyr::filter(sample == s, view == v, Target == t) %>%
+          dplyr::right_join(
+            dummy.tibble,
+            dplyr::join_by(sample, view, Predictor, Target)
+          ) %>%
+          dplyr::mutate(Importance = ifelse(is.na(Importance), 0, Importance)) %>%
+          dplyr::mutate(Importance = scale(Importance)[, 1] * target.pvalues[t])
+      })
     })
-  })
+  }, .progress = TRUE)
 
   message("\nAggregating")
 
