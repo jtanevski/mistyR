@@ -35,7 +35,7 @@
 #' create_initial_view(expr)
 #' @export
 create_initial_view <- function(data, unique.id = NULL) {
-  init.list <- list(intraview = list(abbrev = "intra", data = data))
+  init.list <- list(intraview = data)
 
   misty.uniqueid <- ifelse(is.null(unique.id),
     digest::digest(data, "md5"),
@@ -58,7 +58,6 @@ create_initial_view <- function(data, unique.id = NULL) {
 #' @param name Name of the view. A character vector.
 #' @param data A \code{data.frame} or a \code{tibble} with named variables in
 #'     columns and rows for each spatial unit ordered as in the intraview.
-#' @param abbrev Abbreviated name. A character vector.
 #'
 #' @return A new mistyR view. A list with a single \code{name}d item described by
 #'     the provided \code{abbrev}iation and \emph{data} containing the provided
@@ -93,10 +92,10 @@ create_initial_view <- function(data, unique.id = NULL) {
 #'     slice(neighbors[, .x]) %>%
 #'     colMeans())
 #'
-#' create_view("nearest", nnexpr, "nn")
+#' create_view("nearest", nnexpr)
 #' @export
-create_view <- function(name, data, abbrev = name) {
-  new.list <- list(list(abbrev = abbrev, data = data))
+create_view <- function(name, data) {
+  new.list <- list(data)
   names(new.list)[1] <- name
   return(new.list)
 }
@@ -126,10 +125,10 @@ create_view <- function(name, data, abbrev = name) {
 #'
 #' misty.views <- create_initial_view(view1)
 #'
-#' new.view <- create_view("dummyname", view2, "dname")
+#' new.view <- create_view("dummyname", view2)
 #' add_views(misty.views, new.view)
 #'
-#' misty.views %>% add_views(create_view("dummyname", view2, "dname"))
+#' misty.views %>% add_views(create_view("dummyname", view2))
 #' @export
 add_views <- function(current.views, new.views) {
   assertthat::assert_that(length(current.views) >= 1,
@@ -142,39 +141,23 @@ add_views <- function(current.views, new.views) {
     msg = "The new views are not in a list or vector."
   )
 
-  assertthat::assert_that(length(new.views %>%
-    unlist(recursive = FALSE)) %% 2 == 0,
-  msg = "The new view is malformed. Consider using create_view()."
-  )
-
   assertthat::assert_that(!any(names(new.views) %in% names(current.views)),
     msg = "The list of new views contains a duplicate view name."
-  )
-
-  view.abbrev <- current.views %>%
-    rlist::list.remove(c("misty.uniqueid")) %>%
-    purrr::map_chr(~ .x[["abbrev"]])
-
-  new.view.abbrev <- new.views %>% purrr::map_chr(~ .x[["abbrev"]])
-
-  assertthat::assert_that(!any(new.view.abbrev %in% view.abbrev),
-    msg = "The list of new views contains a duplicate abbreviation."
   )
 
   new.views %>% purrr::walk(function(new.view) {
     # check for naming of each element, abbreviation and existance of a table
     assertthat::assert_that(is.list(new.view),
-      !is.null(new.view[["abbrev"]]),
-      is.character(new.view[["abbrev"]]),
-      !is.null(new.view[["data"]]),
-      (is.data.frame(new.view[["data"]]) | tibble::is_tibble(new.view[["data"]])),
+      !is.null(new.view),
+      (is.data.frame(new.view) | tibble::is_tibble(new.view)),
       msg = "The new view is malformed. Consider using create_view()."
     )
 
     # check for row compatibility
-    assertthat::assert_that(nrow(current.views[["intraview"]][["data"]]) ==
-      nrow(new.view[["data"]]),
-    msg = "The new view should have the same number of rows as the intraview."
+    assertthat::assert_that(
+      nrow(current.views[["intraview"]]) ==
+        nrow(new.view),
+      msg = "The new view should have the same number of rows as the intraview."
     )
   })
 
@@ -217,7 +200,9 @@ get_neighbors <- function(ddobj, id) {
 #'     with named coordinates in columns and rows for each spatial unit ordered
 #'     as in the intraview.
 #' @param neighbor.thr a threshold value used to indicate the largest distance
-#'     between two spatial units that can be considered as neighboring.
+#'     between two spatial units that can be considered as neighboring. If NULL
+#'     (default) the threshold is set to the mean + 2 standard deviations of the
+#'     first nearest neighbors distances.
 #' @param prefix a prefix to add to the column names.
 #' @param cached a \code{logical} indicating whether to cache the calculated view
 #'     after the first calculation and to reuse a previously cached view if it
@@ -249,9 +234,17 @@ get_neighbors <- function(ddobj, id) {
 #' # preview
 #' str(misty.views[["juxtaview.1.5"]])
 #' @export
-add_juxtaview <- function(current.views, positions, neighbor.thr = 15,
+add_juxtaview <- function(current.views, positions, neighbor.thr = NULL,
                           prefix = "", cached = FALSE, verbose = TRUE) {
-  expr <- current.views[["intraview"]][["data"]]
+  
+  if(is.null(neighbor.thr)){
+    all.dist <- distances::distances(positions %>% as.matrix())
+    nn <- distances::nearest_neighbor_search(all.dist, 2)[2,]
+    dist1 <- seq_len(nrow(positions)) %>% purrr::map_dbl(~all.dist[.x, nn[.x]])
+    neighbor.thr <- 2 * stats::sd(dist1) + mean(dist1)
+  }
+  
+  expr <- current.views[["intraview"]]
 
   cache.location <- R.utils::getAbsolutePath(paste0(
     ".misty.temp", .Platform$file.sep,
@@ -288,8 +281,7 @@ add_juxtaview <- function(current.views, positions, neighbor.thr = 15,
 
   return(current.views %>% add_views(create_view(
     paste0("juxtaview.", neighbor.thr),
-    juxta.view %>% dplyr::rename_with(~paste0(prefix, .x)),
-    paste0("juxta.", neighbor.thr)
+    juxta.view %>% dplyr::rename_with(~ paste0(prefix, .x))
   )))
 }
 
@@ -457,7 +449,7 @@ add_paraview <- function(current.views, positions, l, zoi = 0,
                          approx = 1, nn = NULL, prefix = "",
                          cached = FALSE, verbose = TRUE) {
   dists <- distances::distances(as.data.frame(positions))
-  expr <- current.views[["intraview"]][["data"]]
+  expr <- current.views[["intraview"]]
 
   cache.location <- R.utils::getAbsolutePath(paste0(
     ".misty.temp", .Platform$file.sep,
@@ -484,10 +476,11 @@ add_paraview <- function(current.views, positions, l, zoi = 0,
       if (approx == 1) {
         if (verbose) message("\nGenerating paraview")
         para.view <- seq(nrow(expr)) %>%
-          furrr::future_map_dfr(~ data.frame(t(colSums(expr[-.x, ] *
-            get_weight(family, dists[, .x][-.x], l, zoi)))),
-          .options = furrr::furrr_options(packages = "distances"),
-          .progress = verbose
+          furrr::future_map_dfr(
+            ~ data.frame(t(colSums(expr[-.x, ] *
+              get_weight(family, dists[, .x][-.x], l, zoi)))),
+            .options = furrr::furrr_options(packages = "distances"),
+            .progress = verbose
           )
       } else {
         if (approx < 1) approx <- base::round(approx * ncol(dists))
@@ -509,9 +502,10 @@ add_paraview <- function(current.views, positions, l, zoi = 0,
         # return Nystrom list
         K.approx <- list(s = s, C = C, W.plus = W.plus)
         para.view <- seq(nrow(expr)) %>%
-          furrr::future_map_dfr(~ data.frame(t(colSums(expr[-.x, ] *
-            sample_nystrom_row(K.approx, .x)[-.x]))),
-          .progress = verbose
+          furrr::future_map_dfr(
+            ~ data.frame(t(colSums(expr[-.x, ] *
+              sample_nystrom_row(K.approx, .x)[-.x]))),
+            .progress = verbose
           )
       }
     } else {
@@ -522,24 +516,24 @@ add_paraview <- function(current.views, positions, l, zoi = 0,
         )
       }
       para.view <- seq(nrow(expr)) %>%
-        furrr::future_map_dfr(function(rowid) {
-          knn <- distances::nearest_neighbor_search(dists, nn + 1,
-            query_indices = rowid
-          )[-1, 1]
-          data.frame(t(colSums(expr[knn, ] *
-            get_weight(family, dists[knn, rowid], l, zoi))))
-        },
-        .options = furrr::furrr_options(packages = "distances"),
-        .progress = verbose
+        furrr::future_map_dfr(
+          function(rowid) {
+            knn <- distances::nearest_neighbor_search(dists, nn + 1,
+              query_indices = rowid
+            )[-1, 1]
+            data.frame(t(colSums(expr[knn, ] *
+              get_weight(family, dists[knn, rowid], l, zoi))))
+          },
+          .options = furrr::furrr_options(packages = "distances"),
+          .progress = verbose
         )
     }
     if (cached) readr::write_rds(para.view, para.cache.file)
   }
-  
+
   return(current.views %>% add_views(create_view(
     paste0("paraview.", l),
-    para.view %>% dplyr::rename_with(~paste0(prefix, .x)),
-    paste0("para.", l)
+    para.view %>% dplyr::rename_with(~ paste0(prefix, .x))
   )))
 }
 

@@ -4,7 +4,7 @@
 \alias{rename_view}
 \title{Rename view in a view composition}
 \usage{
-rename_view(current.views, old.name, new.name, new.abbrev = new.name)
+rename_view(current.views, old.name, new.name)
 }
 \arguments{
 \item{current.views}{the current view composition.}
@@ -12,8 +12,6 @@ rename_view(current.views, old.name, new.name, new.abbrev = new.name)
 \item{old.name}{old name of the view.}
 
 \item{new.name}{new name of the view.}
-
-\item{new.abbrev}{new abbreviated name.}
 }
 \value{
 A mistyR view composition with a renamed view.
@@ -26,12 +24,12 @@ view1 <- data.frame(marker1 = rnorm(100, 10, 2), marker2 = rnorm(100, 15, 3))
 view2 <- data.frame(marker1 = rnorm(100, 10, 5), marker2 = rnorm(100, 15, 5))
 
 misty.views <- create_initial_view(view1) \%>\%
-  add_views(create_view("originalname", view2, "on"))
+  add_views(create_view("originalname", view2))
 str(misty.views)
 
 # rename and preview
 misty.views \%>\%
-  rename_view("originalname", "renamed", "rn") \%>\%
+  rename_view("originalname", "renamed") \%>\%
   str()
 }
 \seealso{

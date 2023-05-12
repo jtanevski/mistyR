@@ -1,7 +1,7 @@
 Package: mistyR
 Type: Package
 Title: Multiview Intercellular SpaTial modeling framework
-Version: 1.99.2
+Version: 1.99.3
 Authors@R: c(
     person(given = "Jovan",
            family = "Tanevski",
@@ -39,10 +39,10 @@ Depends: R (>= 4.0)
 License: GPL-3
 Encoding: UTF-8
 VignetteBuilder: knitr
-Imports: assertthat, caret, deldir, digest, distances, dplyr, filelock, 
+Imports: assertthat, caret, DBI, deldir, digest, distances, dplyr, filelock, 
     furrr (>= 0.2.0), ggplot2, methods, purrr, ranger, readr (>= 2.0.0), ridge, 
-    rlang, rlist, R.utils, stats, stringr, tibble, tidyr, tidyselect (>= 1.2.0), 
-    utils, withr
+    rlang, rlist, RSQLite, R.utils, stats, stringr, tibble, tidyr, 
+    tidyselect (>= 1.2.0), utils, withr
 Suggests: BiocStyle, covr, earth, future, igraph (>= 1.2.7), iml, kernlab, 
     knitr, MASS, rmarkdown, RSNNS, testthat (>= 3.0.0), xgboost
 RoxygenNote: 7.2.3

@@ -7,7 +7,7 @@
 add_juxtaview(
   current.views,
   positions,
-  neighbor.thr = 15,
+  neighbor.thr = NULL,
   prefix = "",
   cached = FALSE,
   verbose = TRUE
@@ -21,7 +21,9 @@ with named coordinates in columns and rows for each spatial unit ordered
 as in the intraview.}
 
 \item{neighbor.thr}{a threshold value used to indicate the largest distance
-between two spatial units that can be considered as neighboring.}
+between two spatial units that can be considered as neighboring. If NULL
+(default) the threshold is set to the mean + 2 standard deviations of the
+first nearest neighbors distances.}
 
 \item{prefix}{a prefix to add to the column names.}
 

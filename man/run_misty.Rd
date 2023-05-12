@@ -6,14 +6,15 @@
 \usage{
 run_misty(
   views,
-  results.folder = "results",
+  sample.id = "sample",
+  results.db = paste0(sample.id, ".sqm"),
   seed = 42,
   target.subset = NULL,
   bypass.intra = FALSE,
   cv.folds = 10,
   cv.strict = FALSE,
   cached = FALSE,
-  append = FALSE,
+  append = TRUE,
   model.function = random_forest_model,
   ...
 )
@@ -21,7 +22,9 @@ run_misty(
 \arguments{
 \item{views}{view composition.}
 
-\item{results.folder}{path to the top level folder to store raw results.}
+\item{sample.id}{id of the sample.}
+
+\item{results.db}{path to the database file to store the results.}
 
 \item{seed}{seed used for random sampling to ensure reproducibility.}
 
@@ -40,10 +43,8 @@ less than \code{cv.fold} unique values.}
 \item{cached}{a \code{logical} indicating whether to cache the trained models
 and to reuse previously cached ones if they already exist for this sample.}
 
-\item{append}{a \code{logical} indicating whether to append the performance
-and coefficient files in the \code{results.folder}. Consider setting to
-\code{TRUE} when rerunning a workflow with different \code{target.subset}
-parameters.}
+\item{append}{a \code{logical} indicating whether to append the results
+database or create a new one (overwrites existing file).}
 
 \item{model.function}{a function which is used to model each view, default
 model is \code{random_forest_model}. Other models included in mistyR are

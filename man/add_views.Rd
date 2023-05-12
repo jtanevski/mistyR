@@ -27,10 +27,10 @@ view2 <- data.frame(marker1 = rnorm(100, 10, 5), marker2 = rnorm(100, 15, 5))
 
 misty.views <- create_initial_view(view1)
 
-new.view <- create_view("dummyname", view2, "dname")
+new.view <- create_view("dummyname", view2)
 add_views(misty.views, new.view)
 
-misty.views \%>\% add_views(create_view("dummyname", view2, "dname"))
+misty.views \%>\% add_views(create_view("dummyname", view2))
 }
 \seealso{
 \code{\link{create_initial_view}()} for

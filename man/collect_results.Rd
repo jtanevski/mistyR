@@ -4,11 +4,13 @@
 \alias{collect_results}
 \title{Collect and aggregate results}
 \usage{
-collect_results(folders)
+collect_results(db.file, sample.pattern = ".")
 }
 \arguments{
-\item{folders}{Paths to folders containing the raw results from
+\item{db.file}{path to database file with raw results from
 \code{\link{run_misty}()}.}
+
+\item{sample.pattern}{a regex pattern to match sample names.}
 }
 \value{
 List of collected performance, contributions and importances per sample,
@@ -61,11 +63,11 @@ library(purrr)
 
 data("synthetic")
 
-misty.results <- synthetic[seq_len(3)] \%>\%
-  imap_chr(~ create_initial_view(.x \%>\% select(-c(row, col, type))) \%>\%
+synthetic[seq_len(3)] \%>\%
+  walk(~ create_initial_view(.x \%>\% select(-c(row, col, type))) \%>\%
     add_paraview(.x \%>\% select(row, col), l = 10) \%>\%
-    run_misty(paste0("results/", .y))) \%>\%
-  collect_results()
+    run_misty(paste0("results/", .y), "example"))
+misty.results <- collect_results("example.sqm")
 str(misty.results)
 }
 \seealso{

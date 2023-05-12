@@ -44,13 +44,13 @@ of \code{misty.results.from}.
 \examples{
 # if for example the available samples come from different grades of tumors
 
-grade1.results <- collect_results(c("results/synthetic1", "results/synthetic2"))
-grade3.results <- collect_results("results/synthetic10")
+grade1.results <- collect_results("example.sqm", "synthetic[12]$")
+grade3.results <- collect_results("example.sqm", "synthetic10")
 
 # highlight interactions present in grade 1 tumors but not in grade 3 tumors
 # in the paraview
 
-grade3.results \%>\% plot_contrast_results(grade1.results, views = "para.10")
+grade3.results \%>\% plot_contrast_results(grade1.results, views = "paraview.10")
 
 # see the loss of interactions in all views with lower sensitivity
 

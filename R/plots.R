@@ -21,11 +21,10 @@
 #' @family plotting functions
 #'
 #' @examples
-#' all.samples <- list.dirs("results", recursive = FALSE)
 #'
-#' collect_results(all.samples) %>% plot_improvement_stats()
+#' collect_results("example.sqm") %>% plot_improvement_stats()
 #'
-#' misty.results <- collect_results(all.samples)
+#' misty.results <- collect_results("example.sqm")
 #' misty.results %>% plot_improvement_stats(measure = "gain.RMSE")
 #' misty.results %>% plot_improvement_stats(measure = "intra.R2")
 #' @export
@@ -92,9 +91,8 @@ plot_improvement_stats <- function(misty.results,
 #' @family plotting functions
 #'
 #' @examples
-#' all.samples <- list.dirs("results", recursive = FALSE)
 #'
-#' collect_results(all.samples) %>% plot_view_contributions()
+#' collect_results("example.sqm") %>% plot_view_contributions()
 #' @export
 plot_view_contributions <- function(misty.results, trim = -Inf,
                                     trim.measure = c(
@@ -161,9 +159,8 @@ plot_view_contributions <- function(misty.results, trim = -Inf,
 #' @family plotting functions
 #'
 #' @examples
-#' all.samples <- list.dirs("results", recursive = FALSE)
 #'
-#' collect_results(all.samples) %>%
+#' collect_results("example.sqm") %>%
 #'   plot_interaction_heatmap("intra") %>%
 #'   plot_interaction_heatmap("para.10", cutoff = 0.5)
 #' @export
@@ -183,9 +180,10 @@ plot_interaction_heatmap <- function(misty.results, view, cutoff = 1,
     msg = "The provided result list is malformed. Consider using collect_results()."
   )
 
-  assertthat::assert_that((view %in%
-    (misty.results$importances.aggregated %>% dplyr::pull(view))),
-  msg = "The selected view cannot be found in the results table."
+  assertthat::assert_that(
+    (view %in%
+      (misty.results$importances.aggregated %>% dplyr::pull(view))),
+    msg = "The selected view cannot be found in the results table."
   )
 
   inv <- sign((stringr::str_detect(trim.measure.type, "gain") |
@@ -269,9 +267,8 @@ plot_interaction_heatmap <- function(misty.results, view, cutoff = 1,
 #' @family plotting functions
 #'
 #' @examples
-#' all.samples <- list.dirs("results", recursive = FALSE)
 #'
-#' misty.results <- collect_results(all.samples)
+#' misty.results <- collect_results("example.sqm")
 #'
 #' misty.results %>%
 #'   plot_contrast_heatmap("intra", "para.10")
@@ -294,14 +291,16 @@ plot_contrast_heatmap <- function(misty.results, from.view, to.view, cutoff = 1,
     msg = "The provided result list is malformed. Consider using collect_results()."
   )
 
-  assertthat::assert_that((from.view %in%
-    (misty.results$importances.aggregated %>% dplyr::pull(view))),
-  msg = "The selected from.view cannot be found in the results table."
+  assertthat::assert_that(
+    (from.view %in%
+      (misty.results$importances.aggregated %>% dplyr::pull(view))),
+    msg = "The selected from.view cannot be found in the results table."
   )
 
-  assertthat::assert_that((to.view %in%
-    (misty.results$importances.aggregated %>% dplyr::pull(view))),
-  msg = "The selected to.view cannot be found in the results table."
+  assertthat::assert_that(
+    (to.view %in%
+      (misty.results$importances.aggregated %>% dplyr::pull(view))),
+    msg = "The selected to.view cannot be found in the results table."
   )
 
   inv <- sign((stringr::str_detect(trim.measure.type, "gain") |
@@ -376,9 +375,8 @@ plot_contrast_heatmap <- function(misty.results, from.view, to.view, cutoff = 1,
 #' @family plotting functions
 #'
 #' @examples
-#' all.samples <- list.dirs("results", recursive = FALSE)
 #'
-#' misty.results <- collect_results(all.samples)
+#' misty.results <- collect_results("example.sqm")
 #'
 #' misty.results %>%
 #'   plot_interaction_communities("intra") %>%
@@ -392,9 +390,10 @@ plot_interaction_communities <- function(misty.results, view, cutoff = 1) {
     msg = "The provided result list is malformed. Consider using collect_results()."
   )
 
-  assertthat::assert_that((view %in%
-    (misty.results$importances.aggregated %>% dplyr::pull(view))),
-  msg = "The selected view cannot be found in the results table."
+  assertthat::assert_that(
+    (view %in%
+      (misty.results$importances.aggregated %>% dplyr::pull(view))),
+    msg = "The selected view cannot be found in the results table."
   )
 
   view.wide <- misty.results$importances.aggregated %>%
@@ -413,11 +412,12 @@ plot_interaction_communities <- function(misty.results, view, cutoff = 1) {
     msg = "The predictor and target markers in the view must match."
   )
 
-  assertthat::assert_that(requireNamespace("igraph",
-    versionCheck = list(op = ">=", version = "1.2.7"),
-    quietly = TRUE
-  ),
-  msg = "The package igraph (>= 1.2.7) is required to calculate the interaction communities."
+  assertthat::assert_that(
+    requireNamespace("igraph",
+      versionCheck = list(op = ">=", version = "1.2.7"),
+      quietly = TRUE
+    ),
+    msg = "The package igraph (>= 1.2.7) is required to calculate the interaction communities."
   )
 
   A <- view.wide %>%
@@ -474,13 +474,13 @@ plot_interaction_communities <- function(misty.results, view, cutoff = 1) {
 #' @examples
 #' # if for example the available samples come from different grades of tumors
 #'
-#' grade1.results <- collect_results(c("results/synthetic1", "results/synthetic2"))
-#' grade3.results <- collect_results("results/synthetic10")
+#' grade1.results <- collect_results("example.sqm", "synthetic[12]$")
+#' grade3.results <- collect_results("example.sqm", "synthetic10")
 #'
 #' # highlight interactions present in grade 1 tumors but not in grade 3 tumors
 #' # in the paraview
 #'
-#' grade3.results %>% plot_contrast_results(grade1.results, views = "para.10")
+#' grade3.results %>% plot_contrast_results(grade1.results, views = "paraview.10")
 #'
 #' # see the loss of interactions in all views with lower sensitivity
 #'
@@ -511,27 +511,29 @@ plot_contrast_results <- function(misty.results.from, misty.results.to,
   )
 
   if (is.null(views)) {
-    assertthat::assert_that(rlang::is_empty(setdiff(
-      misty.results.from$importances.aggregated %>%
-        dplyr::pull(view) %>%
-        unique(),
-      misty.results.to$importances.aggregated %>%
-        dplyr::pull(view) %>%
-        unique()
-    )),
-    msg = "The requested views do not exist in both result lists."
+    assertthat::assert_that(
+      rlang::is_empty(setdiff(
+        misty.results.from$importances.aggregated %>%
+          dplyr::pull(view) %>%
+          unique(),
+        misty.results.to$importances.aggregated %>%
+          dplyr::pull(view) %>%
+          unique()
+      )),
+      msg = "The requested views do not exist in both result lists."
     )
     views <- misty.results.from$importances.aggregated %>%
       dplyr::pull(view) %>%
       unique()
   } else {
-    assertthat::assert_that(all(views %in%
-      (misty.results.from$importances.aggregated %>%
-        dplyr::pull(view))) &
+    assertthat::assert_that(
       all(views %in%
-        (misty.results.to$importances.aggregated %>%
-          dplyr::pull(view))),
-    msg = "The requested views do not exist in both result lists."
+        (misty.results.from$importances.aggregated %>%
+          dplyr::pull(view))) &
+        all(views %in%
+          (misty.results.to$importances.aggregated %>%
+            dplyr::pull(view))),
+      msg = "The requested views do not exist in both result lists."
     )
   }
 

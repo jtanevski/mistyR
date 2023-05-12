@@ -9,8 +9,9 @@ run_sliding_misty(
   positions,
   window,
   overlap = 50,
-  results.folder = "results",
-  minu = 100,
+  sample.id = "sample",
+  results.db = paste0(sample.id, ".sqm"),
+  minu = 50,
   ...
 )
 }
@@ -21,11 +22,13 @@ run_sliding_misty(
 with named coordinates in columns and rows for each spatial unit ordered
 as in the intraview.}
 
-\item{window}{size of the}
+\item{window}{size of the window.}
 
 \item{overlap}{overlap of consecutive windows (percentage).}
 
-\item{results.folder}{path to the top level folder to store raw results.}
+\item{sample.id}{id of the sample.}
+
+\item{results.db}{path to the database file to store the results.}
 
 \item{minu}{minimum number of spatial units in the window.}
 
@@ -40,6 +43,21 @@ Train local MISTy models by sliding a window across the sample as captured by th
 view composition.
 }
 \examples{
-# TODO
+# Create a view composition of an intraview and a paraview with radius 10 then
+# run sliding MISTy for a single sample.
+
+library(dplyr)
+
+# get the expression data
+data("synthetic")
+expr <- synthetic[[1]] \%>\% select(-c(row, col, type))
+# get the coordinates for each cell
+pos <- synthetic[[1]] \%>\% select(row, col)
+
+# compose
+misty.views <- create_initial_view(expr) \%>\% add_paraview(pos, l = 10)
+
+# run with a window of size 100
+run_sliding_misty(misty.views, pos, window = 100)
 
 }

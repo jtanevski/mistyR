@@ -26,9 +26,8 @@ The communities are identified using the Louvain algorithm. Communities can
 be extracted only from views that have the same predictor and target markers.
 }
 \examples{
-all.samples <- list.dirs("results", recursive = FALSE)
 
-misty.results <- collect_results(all.samples)
+misty.results <- collect_results("example.sqm")
 
 misty.results \%>\%
   plot_interaction_communities("intra") \%>\%

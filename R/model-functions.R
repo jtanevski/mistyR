@@ -2,16 +2,16 @@
 # Copyleft (ɔ) 2021 Philipp Schäfer, Jovan Tanevski <jovan.tanevski@uni-heidelberg.de>
 
 #' Random Forest Implementation
-#' 
-#' The default function to model each view based on random forest as implemented 
+#'
+#' The default function to model each view based on random forest as implemented
 #' in \code{\link[ranger]{ranger}()}.
-#' 
+#'
 #' The following parameters are the default configuration: \code{num.trees = 100},
 #'  \code{importance = "impurity"}, \code{num.threads = 1}, \code{seed = seed}.
-#' 
-#' Can be explicitly called via 
+#'
+#' Can be explicitly called via
 #' \code{run_misty(views, model.function = random_forest_model)}
-#' 
+#'
 #' @param view_data \code{tibble} containing the expression of the markers for
 #' each cell (rows = cells, cols = markers)
 #' @param target \code{string} indicating the target marker, passed by run_misty()
@@ -53,10 +53,10 @@ random_forest_model <- function(view_data, target, seed, ...) {
 
 #' Gradient Boosting Implementation
 #'
-#' Function that can be passed to \code{run_misty()} via \code{run_misty(views, 
-#' model.function = gradient_boosting_model)} to model each view using gradient 
+#' Function that can be passed to \code{run_misty()} via \code{run_misty(views,
+#' model.function = gradient_boosting_model)} to model each view using gradient
 #' boosting. The algorithm is implemented in the \code{xgboost} R package.
-#' 
+#'
 #' The following parameters are the default configuration: \code{booster = "gbtree"},
 #' \code{rounds = 10}, \code{objective = "reg:squarederror"}. Set  \code{booster}
 #' to \code{"gblinear"} for linear boosting.
@@ -65,13 +65,12 @@ random_forest_model <- function(view_data, target, seed, ...) {
 #' each cell (rows = cells, cols = markers)
 #' @param target \code{string} indicating the target marker, passed by run_misty()
 #' @param seed \code{integer} passed by run_misty()
-#' @param k \code{integer} indicating the folds used in cross validation to 
+#' @param k \code{integer} indicating the folds used in cross validation to
 #' compute the unbiased estimates
 #' @param ... all additional parameters are passed to the chosen ML model
 #'
 #' @noRd
 gradient_boosting_model <- function(view_data, target, seed, k = 10, ...) {
-  
   assertthat::assert_that(requireNamespace("xgboost", quietly = TRUE),
     msg = "The package xgboost is required to use gradient boosting"
   )
@@ -163,15 +162,15 @@ gradient_boosting_model <- function(view_data, target, seed, k = 10, ...) {
 
 #' Bagged MARS
 #'
-#' Function that can be passed to \code{run_misty()} via \code{run_misty(views, 
+#' Function that can be passed to \code{run_misty()} via \code{run_misty(views,
 #' model.function = bagged_mars_model)} to model each view using bagged MARS,
-#' meaning multivariate adaptive spline regression models trained with 
-#' bootstrap aggregation samples. The algorithm is implemented in the \code{earth} 
+#' meaning multivariate adaptive spline regression models trained with
+#' bootstrap aggregation samples. The algorithm is implemented in the \code{earth}
 #' R package.
-#' 
+#'
 #' The following parameters are the default configuration: \code{degree = 2}.
 #' Furthermore 50 base learners are used by default (see \code{n.bags}).
-#' 
+#'
 #' @param view_data \code{tibble} containing the expression of the markers
 #' for each cell (rows = cells, cols = markers)
 #' @param target \code{string} indicating the target marker, passed by run_misty()
@@ -183,7 +182,6 @@ gradient_boosting_model <- function(view_data, target, seed, k = 10, ...) {
 #' @noRd
 bagged_mars_model <- function(view_data, target, seed,
                               n.bags = 50, ...) {
-  
   assertthat::assert_that(requireNamespace("earth", quietly = TRUE),
     msg = "The package earth is required to use mars"
   )
@@ -252,12 +250,12 @@ bagged_mars_model <- function(view_data, target, seed,
 
 #' Bagged MARS
 #'
-#' Function that can be passed to \code{run_misty()} via \code{run_misty(views, 
+#' Function that can be passed to \code{run_misty()} via \code{run_misty(views,
 #' model.function = mars_model)} to model each view using a multivariate adaptive
 #' spline regression model. The algorithm is implemented in the \code{earth} R package.
-#' 
+#'
 #' The following parameters are the default configuration: \code{degree = 2}
-#' 
+#'
 #' @param view_data \code{tibble} containing the expression of the markers for
 #' each cell (rows = cells, cols = markers)
 #' @param target \code{string} indicating the target marker, passed by run_misty()
@@ -270,7 +268,6 @@ bagged_mars_model <- function(view_data, target, seed,
 #'
 #' @noRd
 mars_model <- function(view_data, target, seed, approx = 1.0, k = 10, ...) {
-  
   assertthat::assert_that(requireNamespace("earth", quietly = TRUE),
     msg = "The package earth is required to use mars"
   )
@@ -295,7 +292,7 @@ mars_model <- function(view_data, target, seed, approx = 1.0, k = 10, ...) {
       formula = stats::as.formula(paste0(target, " ~ .")),
       data = train,
       degree = 2,
-      fast.k = 5,   # reducing fast.k and
+      fast.k = 5, # reducing fast.k and
       thresh = 0.01 # increasing thresh to increase the performance
     )
 
@@ -307,7 +304,7 @@ mars_model <- function(view_data, target, seed, approx = 1.0, k = 10, ...) {
 
     label.hat <- stats::predict(model, test)
 
-    tibble::tibble(index = holdout, prediction = label.hat[,1])
+    tibble::tibble(index = holdout, prediction = label.hat[, 1])
   }) %>% dplyr::arrange(index)
 
   algo.arguments.wm <- list(
@@ -337,9 +334,9 @@ mars_model <- function(view_data, target, seed, approx = 1.0, k = 10, ...) {
 
 #' Simple Linear Model
 #'
-#' Function that can be passed to \code{run_misty()} via \code{run_misty(views, 
+#' Function that can be passed to \code{run_misty()} via \code{run_misty(views,
 #' model.function = linear_model)} to model each view using a simple linear model
-#' 
+#'
 #' @param view_data \code{tibble} containing the expression of the markers for
 #' each cell (rows = cells, cols = markers)
 #' @param target \code{string} indicating the target marker, passed by run_misty()
@@ -390,13 +387,13 @@ linear_model <- function(view_data, target, seed, k = 10, ...) {
 
 #' SVM Implementation
 #'
-#' Function that can be passed to \code{run_misty()} via \code{run_misty(views, 
-#' model.function = gradient_boosting_model)} to model each view using a 
+#' Function that can be passed to \code{run_misty()} via \code{run_misty(views,
+#' model.function = gradient_boosting_model)} to model each view using a
 #' support vector machine. The algorithm is implemented in the \code{kernlab} R package.
-#' 
-#' The following parameters are the default configuration: \code{kernel = "vanilladot"} 
+#'
+#' The following parameters are the default configuration: \code{kernel = "vanilladot"}
 #' (linear kernel), \code{C = 1}, \code{type = "eps-svr"}.
-#' 
+#'
 #' @param view_data \code{tibble} containing the expression of the markers for each cell
 #' (rows = cells, cols = markers)
 #' @param target \code{string} indicating the target marker, passed by run_misty()
@@ -407,7 +404,6 @@ linear_model <- function(view_data, target, seed, k = 10, ...) {
 #'
 #' @noRd
 svm_model <- function(view_data, target, seed, approx = 0.4, k = 10, ...) {
-  
   assertthat::assert_that(requireNamespace("kernlab", quietly = TRUE),
     msg = "The package kernlab is required to use SVM"
   )
@@ -472,13 +468,13 @@ svm_model <- function(view_data, target, seed, approx = 0.4, k = 10, ...) {
 
 #' Multi-layer Perceptron Implementation
 #'
-#' Function that can be passed to \code{run_misty()} via \code{run_misty(views, 
+#' Function that can be passed to \code{run_misty()} via \code{run_misty(views,
 #' model.function = mlp_model)} to model each view using a multi-layer perceptron.
 #'  The algorithm is implemented in the \code{RSNNS} R package.
-#' 
-#' The following parameters are the default configuration: \code{size = c(10)} 
+#'
+#' The following parameters are the default configuration: \code{size = c(10)}
 #' (meaning we have 1 hidden layer with 10 units).
-#' 
+#'
 #' @param view_data \code{tibble} containing the expression of the markers for each cell
 #' (rows = cells, cols = markers)
 #' @param target \code{string} indicating the target marker, passed by run_misty()
@@ -489,7 +485,6 @@ svm_model <- function(view_data, target, seed, approx = 0.4, k = 10, ...) {
 #'
 #' @noRd
 mlp_model <- function(view_data, target, seed, approx = 0.6, k = 10, ...) {
-  
   assertthat::assert_that(requireNamespace("RSNNS", quietly = TRUE),
     msg = "The package RSNNS is required to use mlp"
   )
@@ -535,7 +530,7 @@ mlp_model <- function(view_data, target, seed, approx = 0.6, k = 10, ...) {
 
     label.hat <- stats::predict(model, X_test)
 
-    tibble::tibble(index = holdout, prediction = label.hat[,1])
+    tibble::tibble(index = holdout, prediction = label.hat[, 1])
   }) %>% dplyr::arrange(index)
 
   algo.arguments.wm <- list(

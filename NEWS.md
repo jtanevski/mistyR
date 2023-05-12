@@ -1,7 +1,8 @@
 # mistyR 1.99.x
 
 - Enable signature extraction without intersecting targets.
-- Sliding MISTy
+- Sliding MISTy.
+- Results are now stored in database instead of a folder.
 
 # mistyR 1.8.0
 

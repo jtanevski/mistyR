@@ -36,9 +36,8 @@ The heatmap shows the interactions that are present and have importance above
 a \code{cutoff} value in the \code{to.view} but but not in the \code{from.view}.
 }
 \examples{
-all.samples <- list.dirs("results", recursive = FALSE)
 
-misty.results <- collect_results(all.samples)
+misty.results <- collect_results("example.sqm")
 
 misty.results \%>\%
   plot_contrast_heatmap("intra", "para.10")

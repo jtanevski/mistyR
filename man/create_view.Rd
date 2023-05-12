@@ -4,15 +4,13 @@
 \alias{create_view}
 \title{Create a custom view}
 \usage{
-create_view(name, data, abbrev = name)
+create_view(name, data)
 }
 \arguments{
 \item{name}{Name of the view. A character vector.}
 
 \item{data}{A \code{data.frame} or a \code{tibble} with named variables in
 columns and rows for each spatial unit ordered as in the intraview.}
-
-\item{abbrev}{Abbreviated name. A character vector.}
 }
 \value{
 A new mistyR view. A list with a single \code{name}d item described by
@@ -49,7 +47,7 @@ nnexpr <- seq_len(nrow(expr)) \%>\%
     slice(neighbors[, .x]) \%>\%
     colMeans())
 
-create_view("nearest", nnexpr, "nn")
+create_view("nearest", nnexpr)
 }
 \seealso{
 \code{\link{add_views}()} for adding created views

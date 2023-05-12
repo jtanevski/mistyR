@@ -60,7 +60,7 @@ filter_views <- function(current.views, rows, view = "intraview", ...) {
       msg = "Filtering based on the unique id is not possible."
     )
 
-    toslice <- current.views[[view]][["data"]] %>%
+    toslice <- current.views[[view]] %>%
       dplyr::transmute(...) %>%
       apply(1, purrr::reduce, `&`) %>%
       which()
@@ -70,8 +70,8 @@ filter_views <- function(current.views, rows, view = "intraview", ...) {
 
   purrr::modify_if(
     current.views,
-    ~ length(.x) > 1,
-    ~ purrr::modify_at(.x, "data", ~ dplyr::slice(.x, toslice))
+    is.data.frame,
+    ~ dplyr::slice(.x, toslice)
   )
 }
 
@@ -118,16 +118,7 @@ select_markers <- function(current.views, view = "intraview", ...) {
     msg = "Marker selection based on the unique id is not possible."
   )
 
-  purrr::modify_at(
-    current.views, view,
-    function(x, ...) {
-      purrr::modify_at(
-        x, "data",
-        function(xdata, ...) dplyr::select(xdata, ...),
-        ...
-      )
-    }, ...
-  )
+  purrr::modify_at(current.views, view, dplyr::select, ...)
 }
 
 
@@ -137,7 +128,6 @@ select_markers <- function(current.views, view = "intraview", ...) {
 #'
 #' @param old.name old name of the view.
 #' @param new.name new name of the view.
-#' @param new.abbrev new abbreviated name.
 #'
 #' @return A mistyR view composition with a renamed view.
 #'
@@ -148,22 +138,22 @@ select_markers <- function(current.views, view = "intraview", ...) {
 #' view2 <- data.frame(marker1 = rnorm(100, 10, 5), marker2 = rnorm(100, 15, 5))
 #'
 #' misty.views <- create_initial_view(view1) %>%
-#'   add_views(create_view("originalname", view2, "on"))
+#'   add_views(create_view("originalname", view2))
 #' str(misty.views)
 #'
 #' # rename and preview
 #' misty.views %>%
-#'   rename_view("originalname", "renamed", "rn") %>%
+#'   rename_view("originalname", "renamed") %>%
 #'   str()
 #' @export
 rename_view <- function(current.views, old.name,
-                        new.name, new.abbrev = new.name) {
+                        new.name) {
   assertthat::assert_that(old.name %in% names(current.views),
     msg = "The requested view cannot be found in the current view composition."
   )
 
   old.view <- purrr::pluck(current.views, old.name)
-  old.view$abbrev <- new.abbrev
+
   changed.view <- list(old.view)
   names(changed.view) <- new.name
 

@@ -28,11 +28,10 @@ Generates a plot of the mean (+- standard deviation) of the performance value
 per target across all samples from the results.
 }
 \examples{
-all.samples <- list.dirs("results", recursive = FALSE)
 
-collect_results(all.samples) \%>\% plot_improvement_stats()
+collect_results("example.sqm") \%>\% plot_improvement_stats()
 
-misty.results <- collect_results(all.samples)
+misty.results <- collect_results("example.sqm")
 misty.results \%>\% plot_improvement_stats(measure = "gain.RMSE")
 misty.results \%>\% plot_improvement_stats(measure = "intra.R2")
 }

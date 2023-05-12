@@ -70,8 +70,9 @@ aggregate_results <- function(improvements, contributions, importances) {
 #' Collect and aggregate performance, contribution and importance estimations
 #' of a set of raw results produced by \code{\link{run_misty}()}.
 #'
-#' @param folders Paths to folders containing the raw results from
+#' @param db.file path to database file with raw results from
 #'     \code{\link{run_misty}()}.
+#' @param sample.pattern a regex pattern to match sample names.
 #'
 #' @return List of collected performance, contributions and importances per sample,
 #'     performance and contribution statistics and aggregated importances.
@@ -122,110 +123,73 @@ aggregate_results <- function(improvements, contributions, importances) {
 #'
 #' data("synthetic")
 #'
-#' misty.results <- synthetic[seq_len(3)] %>%
-#'   imap_chr(~ create_initial_view(.x %>% select(-c(row, col, type))) %>%
+#' synthetic[seq_len(3)] %>%
+#'   walk(~ create_initial_view(.x %>% select(-c(row, col, type))) %>%
 #'     add_paraview(.x %>% select(row, col), l = 10) %>%
-#'     run_misty(paste0("results/", .y))) %>%
-#'   collect_results()
+#'     run_misty(paste0("results/", .y), "example"))
+#' misty.results <- collect_results("example.sqm")
 #' str(misty.results)
 #' @export
-collect_results <- function(folders) {
-  samples <- R.utils::getAbsolutePath(folders)
+collect_results <- function(db.file, sample.pattern = ".") {
+  sqm <- DBI::dbConnect(RSQLite::SQLite(), db.file)
 
   message("\nCollecting improvements")
-  improvements <- samples %>%
-    furrr::future_map_dfr(function(sample) {
-      performance <- readr::read_table(paste0(sample, .Platform$file.sep, "performance.txt"),
-        na = c("", "NA", "NaN"), col_types = readr::cols()
-      ) %>% dplyr::distinct()
 
-      performance %>%
-        dplyr::mutate(
-          sample = sample,
-          gain.RMSE = 100 * (intra.RMSE - multi.RMSE) / intra.RMSE,
-          gain.R2 = multi.R2 - intra.R2
-        )
-    }, .progress = TRUE) %>%
+  improvements <- DBI::dbReadTable(sqm, "improvements") %>%
+    tibble::as_tibble() %>%
+    dplyr::filter(stringr::str_detect(sample, sample.pattern)) %>%
+    tidyr::pivot_wider(names_from = "measure", values_from = "value") %>%
+    dplyr::mutate(
+      gain.RMSE = 100 * (intra.RMSE - multi.RMSE) / intra.RMSE,
+      gain.R2 = multi.R2 - intra.R2
+    ) %>%
     tidyr::pivot_longer(-c(sample, target), names_to = "measure")
 
 
   message("\nCollecting contributions")
-  contributions <- samples %>% furrr::future_map_dfr(function(sample) {
-    coefficients <- readr::read_table(paste0(sample, .Platform$file.sep, "coefficients.txt"),
-      na = c("", "NA", "NaN"), col_types = readr::cols()
-    ) %>% dplyr::distinct()
 
-    coefficients %>%
-      dplyr::mutate(sample = sample, .after = "target") %>%
-      tidyr::pivot_longer(cols = -c(sample, target), names_to = "view")
-  }, .progress = TRUE)
+  contributions <- DBI::dbReadTable(sqm, "contributions") %>%
+    tibble::as_tibble() %>%
+    dplyr::filter(stringr::str_detect(sample, sample.pattern))
 
   message("\nCollecting importances")
-  importances <- samples %>%
-    furrr::future_map_dfr(function(sample) {
-      targets <- contributions %>%
-        dplyr::filter(sample == !!sample) %>%
-        dplyr::pull(target) %>%
-        unique() %>%
-        sort()
-      views <- contributions %>%
-        dplyr::pull(view) %>%
-        unique() %>%
-        stringr::str_subset("^p\\.", negate = TRUE) %>%
-        stringr::str_subset("^intercept$", negate = TRUE)
 
-      # one heatmap per view
-      maps <- views %>%
-        furrr::future_map_dfr(function(view) {
-          all.importances <- targets %>% purrr::map(~ readr::read_csv(
-            paste0(
-              sample, .Platform$file.sep, "importances_", .x, "_", view, ".txt"
-            ),
-            col_types = readr::cols()
-          ) %>%
-            dplyr::distinct() %>%
-            dplyr::rename(feature = target))
+  raw.importances <- DBI::dbReadTable(sqm, "importances") %>%
+    tibble::as_tibble() %>%
+    dplyr::filter(stringr::str_detect(sample, sample.pattern))
 
-          features <- all.importances %>%
-            purrr::map(~ .x$feature) %>%
-            unlist() %>%
-            unique() %>%
-            sort()
+  samples <- raw.importances %>%
+    dplyr::pull(sample) %>%
+    unique()
 
-          pvalues <- contributions %>%
-            dplyr::filter(sample == !!sample, view == paste0("p.", !!view)) %>%
-            dplyr::mutate(value = 1 - value)
+  importances <- samples %>% furrr::future_map_dfr(function(s) {
+    views <- raw.importances %>%
+      dplyr::filter(sample == s) %>%
+      dplyr::pull(view) %>%
+      unique()
 
-          # importances are standardized for each target
-          # and multiplied by 1-pval(view)
-          all.importances %>%
-            purrr::imap_dfc(~
-              tibble::tibble(feature = features, zero.imp = 0) %>%
-                dplyr::left_join(.x, by = "feature") %>%
-                dplyr::arrange(feature) %>%
-                dplyr::mutate(
-                  imp = scale(imp)[, 1],
-                  !!targets[.y] := zero.imp + (imp *
-                    (pvalues %>%
-                      dplyr::filter(target == targets[.y]) %>%
-                      dplyr::pull(value)))
-                )
-                %>%
-                dplyr::select(targets[.y])) %>%
-            dplyr::mutate(Predictor = features) %>%
-            tidyr::pivot_longer(
-              names_to = "Target",
-              values_to = "Importance",
-              -Predictor
-            ) %>%
-            dplyr::mutate(Importance = replace(
-              Importance,
-              is.nan(Importance), 0
-            )) %>%
-            dplyr::mutate(view = view, .before = 1)
-        }) %>%
-        dplyr::mutate(sample = sample, .before = 1)
-    }, .progress = TRUE)
+
+    views %>% furrr::future_map_dfr(function(v) {
+      pvalues <- contributions %>%
+        dplyr::filter(sample == s, view == paste0("p.", v)) %>%
+        dplyr::mutate(value = 1 - value)
+
+      target.pvalues <- pvalues %>% dplyr::pull(value)
+      names(target.pvalues) <- pvalues %>% dplyr::pull(target)
+
+      targets <- raw.importances %>%
+        dplyr::filter(sample == s, view == v) %>%
+        dplyr::pull(Target) %>%
+        unique()
+
+      raw.importances %>%
+        dplyr::filter(sample == s, view == v) %>%
+        dplyr::group_by(Target) %>%
+        dplyr::mutate(Importance = scale(Importance)[, 1] *
+          target.pvalues[dplyr::cur_group_id()]) %>%
+        dplyr::ungroup()
+    })
+  })
 
   message("\nAggregating")
 
@@ -238,50 +202,7 @@ collect_results <- function(folders) {
     aggregate_results(improvements, contributions, importances)
   )
 
-  return(misty.results)
-}
-
-#' Aggregate a subset of results
-#'
-#' @inheritParams collect_results
-#'
-#' @param misty.results a results list generated by
-#'     \code{\link{collect_results}()}.
-#'
-#' @return the \code{misty.results} list with an added list item
-#'     \code{importances.aggregated.subset} containing the aggregated importances
-#'     for the subset of \code{folders}.
-#'
-#' @seealso \code{\link{collect_results}()} to generate a
-#'     results list from raw results.
-#'
-#' @noRd
-aggregate_results_subset <- function(misty.results, folders) {
-  assertthat::assert_that(("importances" %in% names(misty.results)),
-    msg = "The provided result list is malformed. Consider using collect_results()."
-  )
-
-  normalized.folders <- R.utils::getAbsolutePath(folders)
-  # check if folders are in names of misty.results
-  assertthat::assert_that(
-    all(normalized.folders %in%
-      (misty.results$importances %>% dplyr::pull(sample))),
-    msg = "The provided results list doesn't contain information about some of
-    the requested result folders. Consider using collect_results()."
-  )
-
-  message("Aggregating subset")
-  importances.aggregated.subset <- misty.results$importances %>%
-    dplyr::filter(sample %in% normalized.folders) %>%
-    tidyr::unite(".PT", "Predictor", "Target", sep = "&") %>%
-    dplyr::group_by(view, .PT) %>%
-    dplyr::summarise(
-      Importance = mean(Importance),
-      nsamples = dplyr::n(), .groups = "drop"
-    ) %>%
-    tidyr::separate(".PT", c("Predictor", "Target"), sep = "&")
-
-  misty.results[["importances.aggregated.subset"]] <- importances.aggregated.subset
+  DBI::dbDisconnect(sqm)
 
   return(misty.results)
 }
@@ -527,4 +448,89 @@ merge_two <- function(l1, l2) {
     purrr::set_names() %>%
     purrr::map(function(name) l2[[name]])
   return(c(n1_list, n2_list))
+}
+
+
+#' Creates an empty SQLite mistyR results database
+#'
+#' @param path path to the database file
+#'
+#' @noRd
+create_sqm <- function(path, append) {
+  if (file.exists(path) & !append) file.remove(path)
+
+  if (!file.exists(path)) {
+    sqm <- DBI::dbConnect(RSQLite::SQLite(), path)
+
+    DBI::dbCreateTable(
+      sqm, "improvements",
+      c(target = "TEXT", sample = "TEXT", measure = "TEXT", value = "REAL")
+    )
+
+    DBI::dbCreateTable(
+      sqm, "contributions",
+      c(target = "TEXT", sample = "TEXT", view = "TEXT", value = "REAL")
+    )
+
+    DBI::dbCreateTable(
+      sqm, "importances",
+      c(sample = "TEXT", view = "TEXT", Predictor = "TEXT", Target = "TEXT", Importance = "REAL")
+    )
+
+    DBI::dbDisconnect(sqm)
+  }
+}
+
+
+#' Convert results from the old folder structure to a database file
+#'
+#' @param folders Paths to folders containing the raw results from
+#' version 1 \code{\link{run_misty}()}.
+#' @param db.file path to results database file.
+#' @param append a \code{logical} indicating whether to append the results
+#' database or create a new one (overwrites existing file).
+#'
+#' @noRd
+folders_to_sqm <- function(folders, db.file, append = TRUE) {
+  create_sqm(db.file, append)
+  sqm <- DBI::dbConnect(RSQLite::SQLite(), db.file)
+  samples <- R.utils::getAbsolutePath(folders)
+  samples %>% purrr::walk(function(sample) {
+    performance <- readr::read_table(paste0(sample, .Platform$file.sep, "performance.txt"),
+      na = c("", "NA", "NaN"), col_types = readr::cols()
+    ) %>%
+      dplyr::distinct() %>%
+      tidyr::pivot_longer(names_to = "measure", values_to = "value", -target) %>%
+      tibble::add_column(sample = sample, .before = "measure")
+
+    DBI::dbWriteTable(sqm, "improvements", performance, append = TRUE)
+
+    coefficients <- readr::read_table(paste0(sample, .Platform$file.sep, "coefficients.txt"),
+      na = c("", "NA", "NaN"), col_types = readr::cols()
+    ) %>%
+      dplyr::distinct() %>%
+      tidyr::pivot_longer(names_to = "view", values_to = "value", -target) %>%
+      tibble::add_column(sample = sample, .before = "view")
+
+    DBI::dbWriteTable(sqm, "contributions", coefficients, append = TRUE)
+
+    imp.files <- list.files(sample, "importances_", full.names = TRUE)
+    imp.files %>% purrr::walk(\(imp){
+      imp.split <- stringr::str_split(
+        stringr::str_remove(
+          stringr::str_extract(imp, "importances.*"), "\\.txt$"
+        ), "_"
+      )[[1]]
+      importances <- readr::read_csv(imp, col_types = readr::cols()) %>%
+        dplyr::distinct() %>%
+        dplyr::rename(Predictor = target, Importance = imp) %>%
+        tibble::add_column(
+          sample = sample, Target = imp.split[2],
+          view = imp.split[3]
+        )
+      DBI::dbWriteTable(sqm, "importances", importances, append = TRUE)
+    })
+  })
+
+  DBI::dbDisconnect(sqm)
 }

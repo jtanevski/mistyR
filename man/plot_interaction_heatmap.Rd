@@ -38,9 +38,8 @@ The \code{misty.results} list (invisibly).
 Generate a heatmap with importances of predictor-target interaction.
 }
 \examples{
-all.samples <- list.dirs("results", recursive = FALSE)
 
-collect_results(all.samples) \%>\%
+collect_results("example.sqm") \%>\%
   plot_interaction_heatmap("intra") \%>\%
   plot_interaction_heatmap("para.10", cutoff = 0.5)
 }

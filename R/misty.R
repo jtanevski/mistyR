@@ -82,7 +82,8 @@ utils::globalVariables("where")
 #'
 #'
 #' @param views view composition.
-#' @param results.folder path to the top level folder to store raw results.
+#' @param sample.id id of the sample.
+#' @param results.db path to the database file to store the results.
 #' @param seed seed used for random sampling to ensure reproducibility.
 #' @param target.subset subset of targets to train models for. If \code{NULL},
 #'     models will be trained for markers in the intraview.
@@ -94,10 +95,8 @@ utils::globalVariables("where")
 #'     less than \code{cv.fold} unique values.
 #' @param cached a \code{logical} indicating whether to cache the trained models
 #'     and to reuse previously cached ones if they already exist for this sample.
-#' @param append a \code{logical} indicating whether to append the performance
-#'     and coefficient files in the \code{results.folder}. Consider setting to
-#'     \code{TRUE} when rerunning a workflow with different \code{target.subset}
-#'     parameters.
+#' @param append a \code{logical} indicating whether to append the results
+#' database or create a new one (overwrites existing file).
 #' @param model.function a function which is used to model each view, default
 #'     model is \code{random_forest_model}. Other models included in mistyR are
 #'     \code{gradient_boosting_model}, \code{bagged_mars_model},
@@ -130,9 +129,10 @@ utils::globalVariables("where")
 #' # run with default parameters
 #' run_misty(misty.views)
 #' @export
-run_misty <- function(views, results.folder = "results", seed = 42,
+run_misty <- function(views, sample.id = "sample", 
+                      results.db = paste0(sample.id,".sqm"), seed = 42,
                       target.subset = NULL, bypass.intra = FALSE, cv.folds = 10,
-                      cv.strict = FALSE, cached = FALSE, append = FALSE,
+                      cv.strict = FALSE, cached = FALSE, append = TRUE,
                       model.function = random_forest_model,
                       ...) {
   model.name <- as.character(rlang::enexpr(model.function))
@@ -153,18 +153,12 @@ run_misty <- function(views, results.folder = "results", seed = 42,
       where(~ (length(unique(.)) >= ifelse(cv.strict, cv.folds, 1)))
     )
 
-  view.abbrev <- clean.views %>%
+  view.names <- clean.views %>%
     rlist::list.remove(c("misty.uniqueid")) %>%
-    purrr::map_chr(~ .x[["abbrev"]])
+    names()
 
 
-  header <- stringr::str_glue("target intercept {views} p.intercept {p.views}",
-    views = paste0(view.abbrev, collapse = " "),
-    p.views = paste0("p.", view.abbrev, collapse = " "),
-    .sep = " "
-  )
-
-  expr <- clean.views[["intraview"]][["data"]]
+  expr <- clean.views[["intraview"]]
 
   check.cv <- assertthat::see_if(nrow(expr) >= cv.folds,
     msg = "The data has less rows than the requested number of cv folds. Stopping."
@@ -184,47 +178,27 @@ run_misty <- function(views, results.folder = "results", seed = 42,
     return(NULL)
   }
 
-  normalized.results.folder <- R.utils::getAbsolutePath(results.folder)
 
-  if (!dir.exists(normalized.results.folder)) {
-    dir.create(normalized.results.folder, recursive = TRUE)
-  }
+  coef.header <- c(
+    "intercept", view.names,
+    "p.intercept", paste0("p.", view.names)
+  )
+
+  perf.header <- c(
+    "intra.RMSE", "intra.R2", "multi.RMSE",
+    "multi.R2", "p.RMSE", "p.R2"
+  )
+
+  db.file <-  R.utils::getAbsolutePath(results.db)
+  db.lock <- paste0(db.file, ".lock")
+
+  on.exit(file.remove(db.lock), add = TRUE)
+
+  current.lock <- filelock::lock(db.lock)
+  create_sqm(db.file, append)
+  filelock::unlock(current.lock)
 
   if (ncol(expr) == 1) bypass.intra <- TRUE
-
-  coef.file <- paste0(
-    normalized.results.folder, .Platform$file.sep,
-    "coefficients.txt"
-  )
-  coef.lock <- paste0(
-    normalized.results.folder, .Platform$file.sep,
-    "coefficients.txt.lock"
-  )
-  on.exit(file.remove(coef.lock), add = TRUE)
-
-  if (!append) {
-    current.lock <- filelock::lock(coef.lock)
-    write(header, file = coef.file)
-    filelock::unlock(current.lock)
-  }
-
-  header <- "target intra.RMSE intra.R2 multi.RMSE multi.R2 p.RMSE p.R2"
-
-  perf.file <- paste0(
-    normalized.results.folder, .Platform$file.sep,
-    "performance.txt"
-  )
-  perf.lock <- paste0(
-    normalized.results.folder, .Platform$file.sep,
-    "performance.txt.lock"
-  )
-  on.exit(file.remove(perf.lock), add = TRUE)
-
-  if (!append) {
-    current.lock <- filelock::lock(perf.lock)
-    write(header, file = perf.file)
-    filelock::unlock(current.lock)
-  }
 
   targets <- switch(class(target.subset),
     "numeric" = colnames(expr)[target.subset],
@@ -277,32 +251,34 @@ run_misty <- function(views, results.folder = "results", seed = 42,
       pvals
     )
 
-    current.lock <- filelock::lock(coef.lock)
-    write(paste(target, paste(coeff, collapse = " ")),
-      file = coef.file, append = TRUE
+    sqm <- DBI::dbConnect(RSQLite::SQLite(), db.file)
+
+    current.lock <- filelock::lock(db.lock)
+    DBI::dbWriteTable(sqm, "contributions",
+      data.frame(
+        target = target, sample = sample.id,
+        view = coef.header, value = coeff
+      ),
+      append = TRUE
     )
     filelock::unlock(current.lock)
 
     # raw importances
+    current.lock <- filelock::lock(db.lock)
     target.model[["model.importances"]] %>% purrr::walk2(
-      view.abbrev,
+      view.names,
       function(model.importance, abbrev) {
-        targets <- names(model.importance)
-
-        imps <- tibble::tibble(
-          target = targets,
-          imp = model.importance
-        )
-
-        readr::write_csv(
-          imps,
-          paste0(
-            normalized.results.folder, .Platform$file.sep,
-            "importances_", target, "_", abbrev, ".txt"
-          )
+        DBI::dbWriteTable(sqm, "importances",
+          data.frame(
+            sample = sample.id, view = abbrev,
+            Predictor = names(model.importance), Target = target,
+            Importance = model.importance
+          ),
+          append = TRUE
         )
       }
     )
+    filelock::unlock(current.lock)
 
 
     # performance
@@ -358,17 +334,22 @@ run_misty <- function(views, results.folder = "results", seed = 42,
       })
     )
 
-    current.lock <- filelock::lock(perf.lock)
-    # replace NaN p values with 1
-    write(paste(target, paste(performance.summary %>% tidyr::replace_na(1), collapse = " ")),
-      file = perf.file, append = TRUE
+    current.lock <- filelock::lock(db.lock)
+    DBI::dbWriteTable(sqm, "improvements",
+      data.frame(
+        target = target, sample = sample.id,
+        measure = perf.header, value = performance.summary %>% tidyr::replace_na(1)
+      ),
+      append = TRUE
     )
     filelock::unlock(current.lock)
+
+    DBI::dbDisconnect(sqm)
 
     return(target)
   }, ..., .progress = TRUE, .options = furrr::furrr_options(seed = TRUE))
 
-  return(normalized.results.folder)
+  return(db.file)
 }
 
 
@@ -381,9 +362,10 @@ run_misty <- function(views, results.folder = "results", seed = 42,
 #' @param positions a \code{data.frame}, \code{tibble} or a \code{matrix}
 #'     with named coordinates in columns and rows for each spatial unit ordered
 #'     as in the intraview.
-#' @param window size of the
+#' @param window size of the window.
 #' @param overlap overlap of consecutive windows (percentage).
-#' @param results.folder path to the top level folder to store raw results.
+#' @param sample.id id of the sample.
+#' @param results.db path to the database file to store the results.
 #' @param minu minimum number of spatial units in the window.
 #' @param ... all other parameters are passed to \code{\link{run_misty}()}.
 #'
@@ -391,11 +373,27 @@ run_misty <- function(views, results.folder = "results", seed = 42,
 #'     \code{\link{collect_results}()}.
 #'
 #' @examples
-#' # TODO
+#' # Create a view composition of an intraview and a paraview with radius 10 then
+#' # run sliding MISTy for a single sample.
+#'
+#' library(dplyr)
+#'
+#' # get the expression data
+#' data("synthetic")
+#' expr <- synthetic[[1]] %>% select(-c(row, col, type))
+#' # get the coordinates for each cell
+#' pos <- synthetic[[1]] %>% select(row, col)
+#'
+#' # compose
+#' misty.views <- create_initial_view(expr) %>% add_paraview(pos, l = 10)
+#'
+#' # run with a window of size 100
+#' run_sliding_misty(misty.views, pos, window = 100)
 #'
 #' @export
 run_sliding_misty <- function(views, positions, window, overlap = 50,
-                              results.folder = "results", minu = 100,
+                              sample.id = "sample", 
+                              results.db = paste0(sample.id,".sqm"), minu = 50,
                               ...) {
   x <- tibble::tibble(
     xl = seq(
@@ -440,12 +438,13 @@ run_sliding_misty <- function(views, positions, window, overlap = 50,
 
       suppressMessages(run_misty(
         filtered.views,
-        paste0(results.folder, "/", xl, "_", yl, "_", xu, "_", yu),
+        paste0(sample.id, "/", xl, "_", yl, "_", xu, "_", yu),
+        results.db,
         ...
       ))
     }
   }, .progress = TRUE, .options = furrr::furrr_options(seed = TRUE))
 
   future::plan(old.plan)
-  return(list.dirs(results.folder)[-1])
+  return(results.db)
 }
