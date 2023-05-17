@@ -469,10 +469,7 @@ merge_two <- function(l1, l2) {
 #' @param path path to the database file
 #'
 #' @noRd
-create_sqm <- function(path, append) {
-  if (file.exists(path) & !append) file.remove(path)
-
-  if (!file.exists(path)) {
+create_sqm <- function(path) {
     sqm <- DBI::dbConnect(RSQLite::SQLite(), path)
 
     DBI::dbCreateTable(
@@ -491,7 +488,6 @@ create_sqm <- function(path, append) {
     )
 
     DBI::dbDisconnect(sqm)
-  }
 }
 
 

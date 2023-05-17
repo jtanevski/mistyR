@@ -194,9 +194,13 @@ run_misty <- function(views, sample.id = "sample",
 
   on.exit(file.remove(db.lock), add = TRUE)
 
-  current.lock <- filelock::lock(db.lock)
-  create_sqm(db.file, append)
-  filelock::unlock(current.lock)
+  if(file.exists(db.file) & !append) file.remove(db.file)
+  if(!file.exists(db.file)){
+    current.lock <- filelock::lock(db.lock)
+    create_sqm(db.file)
+    filelock::unlock(current.lock)
+    rm(current.lock)
+  }
 
   if (ncol(expr) == 1) bypass.intra <- TRUE
 
@@ -251,34 +255,37 @@ run_misty <- function(views, sample.id = "sample",
       pvals
     )
 
-    sqm <- DBI::dbConnect(RSQLite::SQLite(), db.file)
-
     current.lock <- filelock::lock(db.lock)
-    DBI::dbWriteTable(sqm, "contributions",
-      data.frame(
-        target = target, sample = sample.id,
-        view = coef.header, value = coeff
-      ),
-      append = TRUE
+    
+    #failsafe, on.exit for this anonymous function only
+    on.exit(filelock::unlock(current.lock))
+    
+    sqm <- DBI::dbConnect(RSQLite::SQLite(), db.file)
+    
+    RSQLite::sqliteSetBusyHandler(sqm, 100)
+    
+    to.write <- data.frame(
+      target = target, sample = sample.id,
+      view = coef.header, value = coeff
     )
-    filelock::unlock(current.lock)
+    
+    DBI::dbAppendTable(sqm, "contributions", to.write)
 
     # raw importances
-    current.lock <- filelock::lock(db.lock)
+    
     target.model[["model.importances"]] %>% purrr::walk2(
       view.names,
-      function(model.importance, abbrev) {
-        DBI::dbWriteTable(sqm, "importances",
-          data.frame(
-            sample = sample.id, view = abbrev,
-            Predictor = names(model.importance), Target = target,
-            Importance = model.importance
-          ),
-          append = TRUE
+      function(model.importance, view.name) {
+        
+        to.write <- data.frame(
+          sample = sample.id, view = view.name,
+          Predictor = names(model.importance), Target = target,
+          Importance = model.importance
         )
+        
+        DBI::dbAppendTable(sqm, "importances", to.write)
       }
     )
-    filelock::unlock(current.lock)
 
 
     # performance
@@ -334,17 +341,16 @@ run_misty <- function(views, sample.id = "sample",
       })
     )
 
-    current.lock <- filelock::lock(db.lock)
-    DBI::dbWriteTable(sqm, "improvements",
-      data.frame(
-        target = target, sample = sample.id,
-        measure = perf.header, value = performance.summary %>% tidyr::replace_na(1)
-      ),
-      append = TRUE
+    to.write <- data.frame(
+      target = target, sample = sample.id,
+      measure = perf.header, value = performance.summary %>% tidyr::replace_na(1)
     )
-    filelock::unlock(current.lock)
+    
+    DBI::dbAppendTable(sqm, "improvements", to.write)
 
     DBI::dbDisconnect(sqm)
+    
+    filelock::unlock(current.lock)
 
     return(target)
   }, ..., .progress = TRUE, .options = furrr::furrr_options(seed = TRUE))
