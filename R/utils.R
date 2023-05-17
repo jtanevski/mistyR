@@ -161,6 +161,9 @@ collect_results <- function(db.file, sample.pattern = ".") {
   samples <- raw.importances %>%
     dplyr::pull(sample) %>%
     unique()
+  
+  DBI::dbDisconnect(sqm)
+  rm(sqm)
 
   importances <- samples %>% furrr::future_map_dfr(function(s) {
     views <- raw.importances %>%
@@ -214,8 +217,6 @@ collect_results <- function(db.file, sample.pattern = ".") {
     ),
     aggregate_results(improvements, contributions, importances)
   )
-
-  DBI::dbDisconnect(sqm)
 
   return(misty.results)
 }
@@ -501,7 +502,9 @@ create_sqm <- function(path) {
 #'
 #' @noRd
 folders_to_sqm <- function(folders, db.file, append = TRUE) {
-  create_sqm(db.file, append)
+  if(!append) file.remove(db.file)
+  if(!file.exists(db.file)) create_sqm(db.file)
+  
   sqm <- DBI::dbConnect(RSQLite::SQLite(), db.file)
   samples <- R.utils::getAbsolutePath(folders)
   samples %>% purrr::walk(function(sample) {
