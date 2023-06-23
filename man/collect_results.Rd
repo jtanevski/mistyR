@@ -64,9 +64,9 @@ library(purrr)
 data("synthetic")
 
 synthetic[seq_len(3)] \%>\%
-  walk(~ create_initial_view(.x \%>\% select(-c(row, col, type))) \%>\%
+  iwalk(~ create_initial_view(.x \%>\% select(-c(row, col, type))) \%>\%
     add_paraview(.x \%>\% select(row, col), l = 10) \%>\%
-    run_misty(paste0("results/", .y), "example"))
+    run_misty(paste0("results/", .y), "example.sqm"))
 misty.results <- collect_results("example.sqm")
 str(misty.results)
 }

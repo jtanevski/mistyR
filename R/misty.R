@@ -262,7 +262,7 @@ run_misty <- function(views, sample.id = "sample",
     
     sqm <- DBI::dbConnect(RSQLite::SQLite(), db.file)
     
-    RSQLite::sqliteSetBusyHandler(sqm, 100)
+    RSQLite::sqliteSetBusyHandler(sqm, 250)
     
     to.write <- data.frame(
       target = target, sample = sample.id,
@@ -359,7 +359,7 @@ run_misty <- function(views, sample.id = "sample",
 }
 
 
-#' Train sliding MISTy models
+#' Train Kasumi (sliding MISTy) models
 #'
 #' Train local MISTy models by sliding a window across the sample as captured by the
 #' view composition.
@@ -394,10 +394,10 @@ run_misty <- function(views, sample.id = "sample",
 #' misty.views <- create_initial_view(expr) %>% add_paraview(pos, l = 10)
 #'
 #' # run with a window of size 100
-#' run_sliding_misty(misty.views, pos, window = 100)
+#' run_kasumi(misty.views, pos, window = 100)
 #'
 #' @export
-run_sliding_misty <- function(views, positions, window, overlap = 50,
+run_kasumi <- function(views, positions, window, overlap = 50,
                               sample.id = "sample", 
                               results.db = paste0(sample.id,".sqm"), minu = 50,
                               ...) {
@@ -454,3 +454,8 @@ run_sliding_misty <- function(views, positions, window, overlap = 50,
   future::plan(old.plan)
   return(results.db)
 }
+
+#' @rdname run_kasumi
+#' @examples # run_sliding_misty(misty.views, pos, window = 100)
+#' @export
+run_sliding_misty <- run_kasumi
