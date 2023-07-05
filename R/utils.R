@@ -135,9 +135,16 @@ collect_results <- function(db.file, sample.pattern = ".") {
 
   message("\nCollecting improvements")
 
-  improvements <- DBI::dbReadTable(sqm, "improvements") %>%
+  try.filter <- DBI::dbReadTable(sqm, "improvements") %>%
     tibble::as_tibble() %>%
-    dplyr::filter(stringr::str_detect(sample, sample.pattern)) %>%
+    dplyr::filter(stringr::str_detect(sample, sample.pattern))
+  
+  if(nrow(try.filter) == 0){
+    warning("sample.pattern doesn't match anything in the results database")
+    return(NULL)
+  } 
+  
+  improvements <- try.filter %>%
     tidyr::pivot_wider(names_from = "measure", values_from = "value") %>%
     dplyr::mutate(
       gain.RMSE = 100 * (intra.RMSE - multi.RMSE) / intra.RMSE,
