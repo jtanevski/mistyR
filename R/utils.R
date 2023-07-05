@@ -400,7 +400,8 @@ extract_signature <- function(misty.results,
         dplyr::ungroup()
     },
     "importance" = {
-      views <- misty.results$importances %>%
+      views <- misty.results$importances %>% 
+        filter(Predictor != ".novar") %>%
         dplyr::pull(view) %>%
         unique()
 
