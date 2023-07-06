@@ -9,7 +9,7 @@ plot_contrast_heatmap(
   from.view,
   to.view,
   cutoff = 1,
-  trim = -Inf,
+  trim = 0,
   trim.measure = c("gain.R2", "multi.R2", "intra.R2", "gain.RMSE", "multi.RMSE",
     "intra.RMSE")
 )

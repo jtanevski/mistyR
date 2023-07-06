@@ -6,7 +6,7 @@
 \usage{
 plot_view_contributions(
   misty.results,
-  trim = -Inf,
+  trim = 0,
   trim.measure = c("gain.R2", "multi.R2", "intra.R2", "gain.RMSE", "multi.RMSE",
     "intra.RMSE")
 )

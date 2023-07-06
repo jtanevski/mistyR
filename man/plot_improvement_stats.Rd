@@ -7,7 +7,7 @@
 plot_improvement_stats(
   misty.results,
   measure = c("gain.R2", "multi.R2", "intra.R2", "gain.RMSE", "multi.RMSE", "intra.RMSE"),
-  trim = -Inf
+  trim = 0
 )
 }
 \arguments{

@@ -55,6 +55,7 @@ aggregate_results <- function(improvements, contributions, importances) {
       Importance = mean(Importance),
       nsamples = dplyr::n(), .groups = "drop"
     ) %>%
+    dplyr::filter(Importance >= 0) %>%
     tidyr::separate(".PT", c("Predictor", "Target"), sep = "&")
 
   return(list(

@@ -10,7 +10,7 @@ plot_contrast_results(
   views = NULL,
   cutoff.from = 1,
   cutoff.to = 1,
-  trim = -Inf,
+  trim = 0,
   trim.measure = c("gain.R2", "multi.R2", "intra.R2", "gain.RMSE", "multi.RMSE",
     "intra.RMSE")
 )

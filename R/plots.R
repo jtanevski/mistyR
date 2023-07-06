@@ -33,7 +33,7 @@ plot_improvement_stats <- function(misty.results,
                                      "gain.R2", "multi.R2", "intra.R2",
                                      "gain.RMSE", "multi.RMSE", "intra.RMSE"
                                    ),
-                                   trim = -Inf) {
+                                   trim = 0) {
   measure.type <- match.arg(measure)
 
   assertthat::assert_that(("improvements.stats" %in% names(misty.results)),
@@ -94,7 +94,7 @@ plot_improvement_stats <- function(misty.results,
 #'
 #' collect_results("example.sqm") %>% plot_view_contributions()
 #' @export
-plot_view_contributions <- function(misty.results, trim = -Inf,
+plot_view_contributions <- function(misty.results, trim = 0,
                                     trim.measure = c(
                                       "gain.R2", "multi.R2", "intra.R2",
                                       "gain.RMSE", "multi.RMSE", "intra.RMSE"
@@ -165,7 +165,7 @@ plot_view_contributions <- function(misty.results, trim = -Inf,
 #'   plot_interaction_heatmap("para.10", cutoff = 0.5)
 #' @export
 plot_interaction_heatmap <- function(misty.results, view, cutoff = 1,
-                                     trim = -Inf, trim.measure = c(
+                                     trim = 0, trim.measure = c(
                                        "gain.R2", "multi.R2", "intra.R2",
                                        "gain.RMSE", "multi.RMSE", "intra.RMSE"
                                      ),
@@ -277,7 +277,7 @@ plot_interaction_heatmap <- function(misty.results, view, cutoff = 1,
 #'   plot_contrast_heatmap("intra", "para.10", cutoff = 0.5)
 #' @export
 plot_contrast_heatmap <- function(misty.results, from.view, to.view, cutoff = 1,
-                                  trim = -Inf, trim.measure = c(
+                                  trim = 0, trim.measure = c(
                                     "gain.R2", "multi.R2", "intra.R2",
                                     "gain.RMSE", "multi.RMSE", "intra.RMSE"
                                   )) {
@@ -488,7 +488,7 @@ plot_interaction_communities <- function(misty.results, view, cutoff = 1) {
 #' @export
 plot_contrast_results <- function(misty.results.from, misty.results.to,
                                   views = NULL, cutoff.from = 1, cutoff.to = 1,
-                                  trim = -Inf, trim.measure = c(
+                                  trim = 0, trim.measure = c(
                                     "gain.R2", "multi.R2", "intra.R2",
                                     "gain.RMSE", "multi.RMSE", "intra.RMSE"
                                   )) {
