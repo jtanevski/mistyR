@@ -367,6 +367,10 @@ plot_contrast_heatmap <- function(misty.results, from.view, to.view, cutoff = 1,
 #'
 #' @inheritParams plot_interaction_heatmap
 #'
+#' @param resolution The resolution parameter for the Leiden community detection
+#'      based clustering. The higher the value the higher the number of communities
+#'      with smaller number of members.
+#'
 #' @return The \code{misty.results} list (invisibly).
 #'
 #' @seealso \code{\link{collect_results}()} to generate a
@@ -385,7 +389,13 @@ plot_contrast_heatmap <- function(misty.results, from.view, to.view, cutoff = 1,
 #' misty.results %>%
 #'   plot_interaction_communities("para.10", cutoff = 0.5)
 #' @export
-plot_interaction_communities <- function(misty.results, view, cutoff = 1) {
+plot_interaction_communities <- function(misty.results, view, cutoff = 1,
+                                         trim = 0, trim.measure = c(
+                                           "gain.R2", "multi.R2", "intra.R2",
+                                           "gain.RMSE", "multi.RMSE", "intra.RMSE"
+                                         ), resolution = 1) {
+  trim.measure.type <- match.arg(trim.measure)
+
   assertthat::assert_that(("importances.aggregated" %in% names(misty.results)),
     msg = "The provided result list is malformed. Consider using collect_results()."
   )
@@ -396,22 +406,6 @@ plot_interaction_communities <- function(misty.results, view, cutoff = 1) {
     msg = "The selected view cannot be found in the results table."
   )
 
-  view.wide <- misty.results$importances.aggregated %>%
-    dplyr::filter(view == !!view) %>%
-    tidyr::pivot_wider(
-      names_from = "Target", values_from = "Importance",
-      -c(view, nsamples)
-    )
-
-
-  assertthat::assert_that(
-    all((view.wide %>%
-      dplyr::select(-Predictor) %>% colnames() %>% sort()) ==
-      (view.wide %>%
-        dplyr::pull(Predictor)) %>% sort()),
-    msg = "The predictor and target markers in the view must match."
-  )
-
   assertthat::assert_that(
     requireNamespace("igraph",
       versionCheck = list(op = ">=", version = "1.2.7"),
@@ -420,8 +414,43 @@ plot_interaction_communities <- function(misty.results, view, cutoff = 1) {
     msg = "The package igraph (>= 1.2.7) is required to calculate the interaction communities."
   )
 
-  A <- view.wide %>%
-    dplyr::select(-Predictor) %>%
+  inv <- sign((stringr::str_detect(trim.measure.type, "gain") |
+    stringr::str_detect(trim.measure.type, "RMSE", negate = TRUE)) - 0.5)
+
+  targets <- misty.results$improvements.stats %>%
+    dplyr::filter(
+      measure == trim.measure,
+      inv * mean >= inv * trim
+    ) %>%
+    dplyr::pull(target)
+
+
+  view.wide <- misty.results$importances.aggregated %>%
+    dplyr::filter(view == !!view) %>%
+    tidyr::pivot_wider(
+      names_from = "Target", values_from = "Importance",
+      id_cols = -c(view, nsamples)
+    ) %>%
+    dplyr::mutate(dplyr::across(-c(Predictor, all_of(targets)), function(x) x <- NA))
+
+
+  mistarget <- setdiff(view.wide$Predictor, colnames(view.wide)[-1])
+  mispred <- setdiff(colnames(view.wide)[-1], view.wide$Predictor)
+
+  if (length(mispred) != 0) {
+    view.wide.aug <- view.wide %>% tibble::add_row(Predictor = mispred)
+  } else {
+    view.wide.aug <- view.wide
+  }
+
+  if (length(mistarget) != 0) {
+    view.wide.aug <- view.wide.aug %>%
+      dplyr::bind_cols(mistarget %>%
+        purrr::map_dfc(~ tibble::tibble(!!.x := NA)))
+  }
+
+  A <- view.wide.aug %>%
+    tibble::column_to_rownames("Predictor") %>%
     as.matrix()
   A[A < cutoff | is.na(A)] <- 0
 
@@ -429,11 +458,11 @@ plot_interaction_communities <- function(misty.results, view, cutoff = 1) {
   # The reference to . below works just fine in its own scope
   . <- NULL
 
-  G <- igraph::graph.adjacency(A, mode = "plus", weighted = TRUE) %>%
+  G <- igraph::graph.adjacency(A[, rownames(A)], mode = "plus", weighted = TRUE) %>%
     igraph::set.vertex.attribute("name", value = names(igraph::V(.))) %>%
     igraph::delete.vertices(which(igraph::degree(.) == 0))
 
-  C <- igraph::cluster_leiden(G)
+  C <- igraph::cluster_leiden(G, resolution_parameter = resolution, n_iterations = -1)
 
   layout <- igraph::layout_with_fr(G)
 
