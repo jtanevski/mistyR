@@ -1,6 +1,7 @@
 # mistyR 1.99.x
 
 - Enable signature extraction without intersecting targets.
+- Enable calculation of communities on non-square matrices.
 - Sliding MISTy.
 - Results are now stored in database instead of a folder.
 
