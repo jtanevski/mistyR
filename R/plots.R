@@ -150,6 +150,8 @@ plot_view_contributions <- function(misty.results, trim = 0,
 #' be colored white in the heatmap and considered as not relevant.
 #' @param clean a \code{logical} indicating whether to remove rows and columns
 #' with all importances are below \code{cutoff} from the heatmap.
+#' @param correlation a a \code{logical} indicating whether to plot
+#' correlations or importances
 #'
 #' @return The \code{misty.results} list (invisibly).
 #'
@@ -169,7 +171,7 @@ plot_interaction_heatmap <- function(misty.results, view, cutoff = 1,
                                        "gain.R2", "multi.R2", "intra.R2",
                                        "gain.RMSE", "multi.RMSE", "intra.RMSE"
                                      ),
-                                     clean = FALSE) {
+                                     clean = FALSE, correlation = FALSE) {
   trim.measure.type <- match.arg(trim.measure)
 
   assertthat::assert_that(("importances.aggregated" %in% names(misty.results)),
@@ -217,11 +219,13 @@ plot_interaction_heatmap <- function(misty.results, view, cutoff = 1,
       dplyr::filter(
         Predictor %in% clean.predictors,
         Target %in% clean.targets
-      )
+      ) %>%
+      mutate(Correlation = Correlation * (Importance >= cutoff))
   } else {
     plot.data.clean <- plot.data
   }
 
+  set2.orange <- "#FC8D62"
   set2.blue <- "#8DA0CB"
 
   results.plot <- ggplot2::ggplot(
@@ -231,18 +235,17 @@ plot_interaction_heatmap <- function(misty.results, view, cutoff = 1,
       y = Target
     )
   ) +
-    ggplot2::geom_tile(ggplot2::aes(fill = Importance)) +
+    ggplot2::geom_tile(ggplot2::aes(fill = .data[[ifelse(correlation, "Correlation", "Importance")]])) +
     ggplot2::scale_fill_gradient2(
-      low = "white",
+      low = ifelse(correlation, set2.orange, "white"),
       mid = "white",
       high = set2.blue,
-      midpoint = cutoff
+      midpoint = ifelse(correlation, 0, cutoff)
     ) +
     ggplot2::theme_classic() +
     ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 90, hjust = 1)) +
     ggplot2::coord_equal() +
     ggplot2::ggtitle(view)
-
 
 
   print(results.plot)
@@ -370,6 +373,7 @@ plot_contrast_heatmap <- function(misty.results, from.view, to.view, cutoff = 1,
 #' @param resolution The resolution parameter for the Leiden community detection
 #'      based clustering. The higher the value the higher the number of communities
 #'      with smaller number of members.
+#' @param path path to write a graphml file of the resulting graph 
 #'
 #' @return The \code{misty.results} list (invisibly).
 #'
@@ -393,7 +397,7 @@ plot_interaction_communities <- function(misty.results, view, cutoff = 1,
                                          trim = 0, trim.measure = c(
                                            "gain.R2", "multi.R2", "intra.R2",
                                            "gain.RMSE", "multi.RMSE", "intra.RMSE"
-                                         ), resolution = 1) {
+                                         ), resolution = 1, path = NULL) {
   trim.measure.type <- match.arg(trim.measure)
 
   assertthat::assert_that(("importances.aggregated" %in% names(misty.results)),
@@ -419,7 +423,7 @@ plot_interaction_communities <- function(misty.results, view, cutoff = 1,
 
   targets <- misty.results$improvements.stats %>%
     dplyr::filter(
-      measure == trim.measure,
+      measure == trim.measure.type,
       inv * mean >= inv * trim
     ) %>%
     dplyr::pull(target)
@@ -429,7 +433,7 @@ plot_interaction_communities <- function(misty.results, view, cutoff = 1,
     dplyr::filter(view == !!view) %>%
     tidyr::pivot_wider(
       names_from = "Target", values_from = "Importance",
-      id_cols = -c(view, nsamples)
+      id_cols = -c(view, nsamples, Correlation)
     ) %>%
     dplyr::mutate(dplyr::across(-c(Predictor, all_of(targets)), function(x) x <- NA))
 
@@ -462,15 +466,43 @@ plot_interaction_communities <- function(misty.results, view, cutoff = 1,
     igraph::set.vertex.attribute("name", value = names(igraph::V(.))) %>%
     igraph::delete.vertices(which(igraph::degree(.) == 0))
 
+  Gdir <- igraph::graph.adjacency(A[, rownames(A)], mode = "directed", weighted = TRUE) %>%
+    igraph::set.vertex.attribute("name", value = names(igraph::V(.))) %>%
+    igraph::delete.vertices(which(igraph::degree(.) == 0))
+
   C <- igraph::cluster_leiden(G, resolution_parameter = resolution, n_iterations = -1)
 
-  layout <- igraph::layout_with_fr(G)
+  mem <- igraph::membership(C)
 
-  igraph::plot.igraph(G,
+  Gdir <- igraph::set_vertex_attr(Gdir, "community", names(mem), as.numeric(mem))
+
+  layout <- igraph::layout_with_fr(Gdir)
+
+  cors <- view.wide.aug %>%
+    tidyr::pivot_longer(names_to = "Target", values_to = "Importance", cols = -Predictor) %>%
+    dplyr::filter(!is.na(Importance)) %>%
+    dplyr::left_join(
+      misty.results$importances.aggregated %>%
+        dplyr::filter(view == !!view),
+      by = c("Predictor", "Target")
+    ) %>%
+    dplyr::select(Predictor, Target, Correlation)
+
+  edge.cors <- igraph::as_edgelist(Gdir) %>%
+    data.frame() %>%
+    dplyr::left_join(cors, by = c("X1" = "Predictor", "X2" = "Target")) %>%
+    pull(Correlation)
+
+
+  Gdir <- igraph::set_edge_attr(Gdir, "cor", value = edgecorrs)
+
+  igraph::plot.igraph(Gdir,
     layout = layout, mark.groups = C, main = view, vertex.size = 4,
     vertex.color = "black", vertex.label.dist = 1,
     vertex.label.color = "black", vertex.label.font = 2, vertex.label.cex = 0.66
   )
+  
+  if(!is.null(path)) igraph::write_graph(Gdir, path, "graphml")
 
   invisible(misty.results)
 }

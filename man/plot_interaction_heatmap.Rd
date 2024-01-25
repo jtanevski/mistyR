@@ -11,7 +11,8 @@ plot_interaction_heatmap(
   trim = 0,
   trim.measure = c("gain.R2", "multi.R2", "intra.R2", "gain.RMSE", "multi.RMSE",
     "intra.RMSE"),
-  clean = FALSE
+  clean = FALSE,
+  correlation = FALSE
 )
 }
 \arguments{
@@ -30,6 +31,9 @@ below (otherwise) this value only.}
 
 \item{clean}{a \code{logical} indicating whether to remove rows and columns
 with all importances are below \code{cutoff} from the heatmap.}
+
+\item{correlation}{a a \code{logical} indicating whether to plot
+correlations or importances}
 }
 \value{
 The \code{misty.results} list (invisibly).

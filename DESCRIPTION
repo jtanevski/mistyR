@@ -1,7 +1,7 @@
 Package: mistyR
 Type: Package
 Title: Multiview Intercellular SpaTial modeling framework
-Version: 1.99.9
+Version: 1.99.10
 Authors@R: c(
     person(given = "Jovan",
            family = "Tanevski",
@@ -45,5 +45,5 @@ Imports: assertthat, caret, deldir, digest, distances, dplyr (>= 1.1.0), fileloc
     tidyselect (>= 1.2.0), utils, withr
 Suggests: BiocStyle, covr, earth, future, igraph (>= 1.2.7), iml, kernlab, 
     knitr, MASS, rmarkdown, RSNNS, testthat (>= 3.0.0), xgboost
-RoxygenNote: 7.2.3
+RoxygenNote: 7.3.1
 Config/testthat/edition: 3

@@ -53,6 +53,7 @@ aggregate_results <- function(improvements, contributions, importances) {
     dplyr::group_by(view, .PT) %>%
     dplyr::summarise(
       Importance = mean(Importance),
+      Correlation = mean(Correlation),
       nsamples = dplyr::n(), .groups = "drop"
     ) %>%
     dplyr::filter(Importance >= 0) %>%
@@ -139,12 +140,12 @@ collect_results <- function(db.file, sample.pattern = ".") {
   try.filter <- DBI::dbReadTable(sqm, "improvements") %>%
     tibble::as_tibble() %>%
     dplyr::filter(stringr::str_detect(sample, sample.pattern))
-  
-  if(nrow(try.filter) == 0){
+
+  if (nrow(try.filter) == 0) {
     warning("sample.pattern doesn't match anything in the results database")
     return(NULL)
-  } 
-  
+  }
+
   improvements <- try.filter %>%
     tidyr::pivot_wider(names_from = "measure", values_from = "value") %>%
     dplyr::mutate(
@@ -166,12 +167,12 @@ collect_results <- function(db.file, sample.pattern = ".") {
     tibble::as_tibble() %>%
     dplyr::filter(stringr::str_detect(sample, sample.pattern))
 
+  DBI::dbDisconnect(sqm)
+  rm(sqm)
+
   samples <- raw.importances %>%
     dplyr::pull(sample) %>%
     unique()
-  
-  DBI::dbDisconnect(sqm)
-  rm(sqm)
 
   importances <- samples %>% furrr::future_map_dfr(function(s) {
     views <- raw.importances %>%
@@ -408,7 +409,7 @@ extract_signature <- function(misty.results,
         dplyr::ungroup()
     },
     "importance" = {
-      views <- misty.results$importances %>% 
+      views <- misty.results$importances %>%
         filter(Predictor != ".novar") %>%
         dplyr::pull(view) %>%
         unique()
@@ -445,7 +446,10 @@ extract_signature <- function(misty.results,
               Target %in% target.intersection
             ) %>%
             tidyr::unite(".vPT", view, Predictor, Target) %>%
-            tidyr::pivot_wider(names_from = ".vPT", values_from = "Importance")
+            tidyr::pivot_wider(
+              names_from = ".vPT", values_from = "Importance",
+              id_cols = -Correlation
+            )
         }) %>%
         purrr::reduce(dplyr::full_join, by = "sample")
     }
@@ -480,24 +484,27 @@ merge_two <- function(l1, l2) {
 #'
 #' @noRd
 create_sqm <- function(path) {
-    sqm <- DBI::dbConnect(RSQLite::SQLite(), path)
+  sqm <- DBI::dbConnect(RSQLite::SQLite(), path)
 
-    DBI::dbCreateTable(
-      sqm, "improvements",
-      c(target = "TEXT", sample = "TEXT", measure = "TEXT", value = "REAL")
+  DBI::dbCreateTable(
+    sqm, "improvements",
+    c(target = "TEXT", sample = "TEXT", measure = "TEXT", value = "REAL")
+  )
+
+  DBI::dbCreateTable(
+    sqm, "contributions",
+    c(target = "TEXT", sample = "TEXT", view = "TEXT", value = "REAL")
+  )
+
+  DBI::dbCreateTable(
+    sqm, "importances",
+    c(
+      sample = "TEXT", view = "TEXT", Predictor = "TEXT", Target = "TEXT",
+      Importance = "REAL", Correlation = "REAL"
     )
+  )
 
-    DBI::dbCreateTable(
-      sqm, "contributions",
-      c(target = "TEXT", sample = "TEXT", view = "TEXT", value = "REAL")
-    )
-
-    DBI::dbCreateTable(
-      sqm, "importances",
-      c(sample = "TEXT", view = "TEXT", Predictor = "TEXT", Target = "TEXT", Importance = "REAL")
-    )
-
-    DBI::dbDisconnect(sqm)
+  DBI::dbDisconnect(sqm)
 }
 
 
@@ -511,9 +518,9 @@ create_sqm <- function(path) {
 #'
 #' @noRd
 folders_to_sqm <- function(folders, db.file, append = TRUE) {
-  if(!append) file.remove(db.file)
-  if(!file.exists(db.file)) create_sqm(db.file)
-  
+  if (!append) file.remove(db.file)
+  if (!file.exists(db.file)) create_sqm(db.file)
+
   sqm <- DBI::dbConnect(RSQLite::SQLite(), db.file)
   samples <- R.utils::getAbsolutePath(folders)
   samples %>% purrr::walk(function(sample) {
@@ -555,3 +562,8 @@ folders_to_sqm <- function(folders, db.file, append = TRUE) {
 
   DBI::dbDisconnect(sqm)
 }
+
+
+# function cluster_kasumi ----
+
+# function fit resolution and cutoff based on condition ----

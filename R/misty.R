@@ -277,11 +277,24 @@ run_misty <- function(views, sample.id = "sample",
       view.names,
       function(model.importance, view.name) {
         
+        texpr <- expr %>% dplyr::pull(target)
+        vexpr <- views[[view.name]]
+        
+        if(bypass.intra & view.name == "intraview"){
+         correlations <- tibble::tibble(Predictor = ".novar", Correlation = 0)
+        } else {
+        correlations <- stats::cor(texpr, vexpr, method = "spearman") %>%
+          tibble::as_tibble() %>%
+          tidyr::pivot_longer(tidyselect::everything(),
+            names_to = "Predictor", values_to = "Correlation"
+          )
+        }
+        
         to.write <- data.frame(
           sample = sample.id, view = view.name,
           Predictor = names(model.importance), Target = target,
           Importance = model.importance
-        )
+        ) %>% dplyr::left_join(correlations, by = "Predictor")
         
         DBI::dbAppendTable(sqm, "importances", to.write)
       }

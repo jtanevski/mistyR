@@ -11,7 +11,8 @@ plot_interaction_communities(
   trim = 0,
   trim.measure = c("gain.R2", "multi.R2", "intra.R2", "gain.RMSE", "multi.RMSE",
     "intra.RMSE"),
-  resolution = 1
+  resolution = 1,
+  path = NULL
 )
 }
 \arguments{
@@ -31,6 +32,8 @@ below (otherwise) this value only.}
 \item{resolution}{The resolution parameter for the Leiden community detection
 based clustering. The higher the value the higher the number of communities
 with smaller number of members.}
+
+\item{path}{path to write a graphml file of the resulting graph}
 }
 \value{
 The \code{misty.results} list (invisibly).
