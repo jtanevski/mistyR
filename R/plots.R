@@ -450,7 +450,7 @@ plot_interaction_communities <- function(misty.results, view, cutoff = 1,
   if (length(mistarget) != 0) {
     view.wide.aug <- view.wide.aug %>%
       dplyr::bind_cols(mistarget %>%
-        purrr::map_dfc(~ tibble::tibble(!!.x := NA)))
+        purrr::map_dfc(~ tibble::tibble(!!.x := NA)), .name_repair = "minimal")
   }
 
   A <- view.wide.aug %>%
@@ -494,7 +494,7 @@ plot_interaction_communities <- function(misty.results, view, cutoff = 1,
     pull(Correlation)
 
 
-  Gdir <- igraph::set_edge_attr(Gdir, "cor", value = edgecorrs)
+  Gdir <- igraph::set_edge_attr(Gdir, "cor", value = edge.cors)
 
   igraph::plot.igraph(Gdir,
     layout = layout, mark.groups = C, main = view, vertex.size = 4,
