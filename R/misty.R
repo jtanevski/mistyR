@@ -414,31 +414,8 @@ run_kasumi <- function(views, positions, window, overlap = 50,
                               sample.id = "sample", 
                               results.db = paste0(sample.id,".sqm"), minu = 50,
                               ...) {
-  x <- tibble::tibble(
-    xl = seq(
-      min(positions[, 1]),
-      max(positions[, 1]),
-      window - window * overlap / 100
-    ),
-    xu = xl + window
-  ) %>%
-    dplyr::filter(xl < max(positions[, 1])) %>%
-    dplyr::mutate(xu = pmin(xu, max(positions[, 1]))) %>%
-    round(2)
 
-  y <- tibble::tibble(
-    yl = seq(
-      min(positions[, 2]),
-      max(positions[, 2]),
-      window - window * overlap / 100
-    ),
-    yu = yl + window
-  ) %>%
-    dplyr::filter(yl < max(positions[, 2])) %>%
-    dplyr::mutate(yu = pmin(yu, max(positions[, 2]))) %>%
-    round(2)
-
-  tiles <- tidyr::expand_grid(x, y)
+  tiles <- make_grid(positions, window, overlap)
 
   # make nested plan here with sequential at the second level
   # retrieve current plan by simply running plan() without parameters
@@ -467,6 +444,116 @@ run_kasumi <- function(views, positions, window, overlap = 50,
   future::plan(old.plan)
   return(results.db)
 }
+
+#' Create a grid of windows, based on the positions of the spatial units.
+#' Finds the positions of the windows by sliding a window across the sample as
+#' captured by the view composition.
+#' 
+#' @param positions a \code{data.frame}, \code{tibble} or a \code{matrix}
+#'     with named coordinates in columns and rows for each spatial unit ordered
+#'     as in the intraview.
+#' @param window size of the window.
+#' @param overlap overlap of consecutive windows (percentage).
+#' @return A tibble with the grid of windows.
+make_grid <- function(positions, window, overlap = 50){
+  x <- tibble::tibble(
+    xl = seq(
+      min(positions[, 1]),
+      max(positions[, 1]),
+      window - window * overlap / 100
+    ),
+    xu = xl + window
+  ) %>%
+    dplyr::filter(xl < max(positions[, 1])) %>%
+    dplyr::mutate(xu = pmin(xu, max(positions[, 1]))) %>%
+    round(2)
+
+  y <- tibble::tibble(
+    yl = seq(
+      min(positions[, 2]),
+      max(positions[, 2]),
+      window - window * overlap / 100
+    ),
+    yu = yl + window
+  ) %>%
+    dplyr::filter(yl < max(positions[, 2])) %>%
+    dplyr::mutate(yu = pmin(yu, max(positions[, 2]))) %>%
+    round(2)
+
+  tiles <- tidyr::expand_grid(x, y)
+  return(tiles)
+}
+
+#' Filter tiles based on the number of spatial units in each window.
+filter_tiles <- function(tiles, positions, minu, tile_size = FALSE){
+  tiles <- tiles %>% purrr::pmap(\(xl, xu, yl, yu){
+    selected.rows <- which(
+      positions[, 1] >= xl & positions[, 1] <= xu &
+        positions[, 2] >= yl & positions[, 2] <= yu
+    )
+
+    if (length(selected.rows) >= minu) {
+      return(tibble::tibble(xl, xu, yl, yu, size = length(selected.rows)))
+    }
+  })  %>% dplyr::bind_rows() %>% purrr::compact()
+  
+  med_size <- 0
+  if (nrow(tiles) > 0) {
+    med_size <- median(tiles$size)
+  }
+  message(
+    "Found ", nrow(tiles), " tiles ",
+    "with at least ", minu, " spatial units.",
+    "\nMedian tile size: ", med_size
+   )
+  
+  if (tile_size) tiles <- tiles %>% dplyr::select(-any_of("size"))
+  
+  return(tiles)
+}
+
+#' Get views for each sliding window
+#' 
+#' @param views view composition
+#' @param positions a \code{data.frame}, \code{tibble} or a \code{matrix} with spatial coordinates for each row as in the intraview
+#' @param window size of the window
+#' @param overlap overlap of consecutive windows (percentage)
+#' @param minu minimum number of spatial units in the window
+#' @return A list of view compositions for each sliding window.
+#' 
+#' @examples'
+#' # Create a view composition and get the views for each sliding window
+#' library(dplyr)
+#'
+#' # get the expression data
+#' data("synthetic")
+#' expr <- synthetic[[1]] %>% select(-c(row, col, type))
+#' # get the coordinates for each cell
+#' pos <- synthetic[[1]] %>% select(row, col)
+#' 
+#' # compose
+#' misty.views <- create_initial_view(expr) %>% add_paraview(pos, l = 10)
+#' 
+#' tile.views <- get_filtered_tile_views(misty.views, pos, window = 100)
+#' 
+#' @export 
+get_filtered_tile_views <- function(views, positions, window, overlap = 50, minu = 50){
+  
+  tiles <- make_grid(positions, window, overlap)
+  tiles <- filter_tiles(tiles, positions, minu, tile_size = TRUE)
+  
+  tile_views <- tiles  %>% select(-any_of("size")) %>% pmap(\(xl, xu, yl, yu){
+    selected.rows <- which(
+      positions[, 1] >= xl & positions[, 1] <= xu &
+        positions[, 2] >= yl & positions[, 2] <= yu
+    )
+
+    filtered.views <- views %>% filter_views(selected.rows)
+    return(filtered.views)
+  })
+  return(tile_views)
+}
+
 
 #' @rdname run_kasumi
 #' @examples # run_sliding_misty(misty.views, pos, window = 100)
