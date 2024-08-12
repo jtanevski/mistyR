@@ -74,12 +74,11 @@ utils::globalVariables("where")
 #' (linear kernel), \code{C = 1}, \code{type = "eps-svr"}.
 #'
 #' \emph{MLP} is an alternative to model each view using a multi-layer perceptron.
-#' The alogorithm is based on \code{\link[RSNNS]{mlp}()} --
+#' The algorithm is based on \code{\link[RSNNS]{mlp}()} --
 #' \code{run_misty(views, model.function = mlp_model)}
 #'
 #' The following parameters are the default configuration: \code{size = c(10)}
 #' (meaning we have 1 hidden layer with 10 units).
-#'
 #'
 #' @param views view composition.
 #' @param sample.id id of the sample.
@@ -102,6 +101,9 @@ utils::globalVariables("where")
 #'     \code{gradient_boosting_model}, \code{bagged_mars_model},
 #'     \code{mars_model}, \code{linear_model},
 #'     \code{svm_model}, \code{mlp_model}.
+#' @param sqlite_timeout The timeout duration (in milliseconds) for SQLite to 
+#'     wait for a database lock to be released before returning an error. Default
+#'     is 1000 milliseconds.
 #' @param ... all additional parameters are passed to the chosen ML model for
 #' training the view-specific models.
 #'
@@ -133,7 +135,7 @@ run_misty <- function(views, sample.id = "sample",
                       results.db = paste0(sample.id,".sqm"), seed = 42,
                       target.subset = NULL, bypass.intra = FALSE, cv.folds = 10,
                       cv.strict = FALSE, cached = FALSE, append = TRUE,
-                      model.function = random_forest_model,
+                      model.function = random_forest_model, sqlite_timeout = 1000,
                       ...) {
   model.name <- as.character(rlang::enexpr(model.function))
 
@@ -262,7 +264,7 @@ run_misty <- function(views, sample.id = "sample",
     
     sqm <- DBI::dbConnect(RSQLite::SQLite(), db.file)
     
-    RSQLite::sqliteSetBusyHandler(sqm, 250)
+    RSQLite::sqliteSetBusyHandler(sqm, sqlite_timeout)
     
     to.write <- data.frame(
       target = target, sample = sample.id,

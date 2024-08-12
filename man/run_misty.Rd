@@ -16,6 +16,7 @@ run_misty(
   cached = FALSE,
   append = TRUE,
   model.function = random_forest_model,
+  sqlite_timeout = 1000,
   ...
 )
 }
@@ -51,6 +52,10 @@ model is \code{random_forest_model}. Other models included in mistyR are
 \code{gradient_boosting_model}, \code{bagged_mars_model},
 \code{mars_model}, \code{linear_model},
 \code{svm_model}, \code{mlp_model}.}
+
+\item{sqlite_timeout}{The timeout duration (in milliseconds) for SQLite to 
+wait for a database lock to be released before returning an error. Default
+is 1000 milliseconds.}
 
 \item{...}{all additional parameters are passed to the chosen ML model for
 training the view-specific models.}
@@ -116,7 +121,7 @@ The following parameters are the default configuration: \code{kernel = "vanillad
 (linear kernel), \code{C = 1}, \code{type = "eps-svr"}.
 
 \emph{MLP} is an alternative to model each view using a multi-layer perceptron.
-The alogorithm is based on \code{\link[RSNNS]{mlp}()} --
+The algorithm is based on \code{\link[RSNNS]{mlp}()} --
 \code{run_misty(views, model.function = mlp_model)}
 
 The following parameters are the default configuration: \code{size = c(10)}
