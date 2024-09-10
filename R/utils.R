@@ -52,8 +52,8 @@ aggregate_results <- function(improvements, contributions, importances) {
     tidyr::unite(".PT", "Predictor", "Target", sep = "&") %>%
     dplyr::group_by(view, .PT) %>%
     dplyr::summarise(
-      Importance = mean(Importance),
-      Correlation = mean(Correlation),
+      Importance = mean(Importance, na.rm = TRUE),
+      Correlation = mean(Correlation, na.rm = TRUE),
       nsamples = dplyr::n(), .groups = "drop"
     ) %>%
     dplyr::filter(Importance >= 0) %>%
@@ -562,8 +562,3 @@ folders_to_sqm <- function(folders, db.file, append = TRUE) {
 
   DBI::dbDisconnect(sqm)
 }
-
-
-# function cluster_kasumi ----
-
-# function fit resolution and cutoff based on condition ----
