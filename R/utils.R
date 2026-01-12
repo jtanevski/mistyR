@@ -66,73 +66,122 @@ aggregate_results <- function(improvements, contributions, importances) {
   ))
 }
 
+#' Process Importances
+#'
+#' Processes raw importances by standardizing them per target and weighting them
+#' by the quantile of the coefficient for the target in the corresponding view.
+#'
+#' @param raw.importances A tibble containing raw importance values loaded from the database
+#' @param contributions A tibble containing the contributions of the views, as loaded from the database
+#' @param model_by_target A logical value indicating whether the model is specific
+#'     to each target, i.e. with their respective sets of predictors. Defaults to `FALSE`.
+#' @param target_predictor_df An optional tibble specifying predictors for each
+#'     target and view. For example, this can be a specific set of ligands (predictors) for each receptor (targets).
+#'
+#' @return A tibble with processed importances, standardized and weighted by
+#'     target-specific p-values.
+#'
+#' @seealso \code{\link{aggregate_results}()} for aggregating processed results.
+process_importances <- function(raw.importances, contributions, model_by_target = FALSE, target_predictor_df = NULL) {
 
-#' Collect and aggregate results
+  samples <- raw.importances %>%
+    dplyr::pull(sample) %>%
+    unique()
+
+  importances <- samples %>% furrr::future_map_dfr(function(s) {
+    views <- raw.importances %>%
+      dplyr::filter(sample == s) %>%
+      dplyr::pull(view) %>%
+      unique()
+
+
+    views %>% purrr::map_dfr(function(v) {
+      pvalues <- contributions %>%
+        dplyr::filter(sample == s, view == paste0("p.", v)) %>%
+        dplyr::mutate(value = 1 - value)
+
+      target.pvalues <- pvalues %>% dplyr::pull(value)
+      names(target.pvalues) <- pvalues %>% dplyr::pull(target)
+
+      #get predictors specific to this view (same across all targets, and all samples)
+      if (!model_by_target) {
+        predictors <- raw.importances %>%
+          dplyr::filter(view == v) %>%
+          dplyr::pull(Predictor) %>%
+          unique()
+      }
+
+      targets <- raw.importances %>%
+        dplyr::filter(sample == s, view == v) %>%
+        dplyr::pull(Target) %>%
+        unique()
+
+      targets %>% purrr::map_dfr(function(t) {
+
+        #get predictors specific to this target
+        if (model_by_target && is.null(target_predictor_df)) {
+          predictors <- raw.importances %>%
+            dplyr::filter(sample == s, view == v, Target == t) %>%
+            dplyr::pull(Predictor) %>%
+            unique()
+
+        #get predictors specific to this target from provided dataframe
+        }else if (model_by_target && !is.null(target_predictor_df)) {
+          predictors <- target_predictor_df %>%
+            dplyr::filter(view == v, Target == t) %>%
+            dplyr::pull(Predictor) %>%
+            unique() %>%
+              # take intersection with the predictors actually found in at least one of the samples
+              intersect(
+                raw.importances %>%
+                  dplyr::filter(view == v) %>%
+                  dplyr::pull(Predictor) %>%
+                  unique()
+              )
+        }
+
+        dummy.tibble <- tibble::tibble(
+          sample = s, view = v,
+          Predictor = predictors, Target = t
+        )
+
+        raw.importances %>%
+          dplyr::filter(sample == s, view == v, Target == t) %>%
+          dplyr::right_join(
+            dummy.tibble,
+            dplyr::join_by(sample, view, Predictor, Target)
+          ) %>%
+          dplyr::mutate(Importance = ifelse(is.na(Importance), 0, Importance)) %>%
+          dplyr::mutate(Importance = scale(Importance)[, 1] * target.pvalues[t])
+      })
+    })
+
+  }, .progress = TRUE)
+
+
+  return(importances)
+
+}
+
+#' Collect raw results
 #'
-#' Collect and aggregate performance, contribution and importance estimations
-#' of a set of raw results produced by \code{\link{run_misty}()}.
+#' Collects raw performance, contribution, and importance estimations from a SQLite database.
 #'
-#' @param db.file path to database file with raw results from
-#'     \code{\link{run_misty}()}.
-#' @param sample.pattern a regex pattern to match sample names.
+#' @param db.file Path to the SQLite database file containing raw results.
+#' @param sample.pattern A regex pattern to match sample names. Defaults to "." (matches all samples).
+#' @param ... Additional arguments passed to \code{\link{process_importances}()}.
 #'
-#' @return List of collected performance, contributions and importances per sample,
-#'     performance and contribution statistics and aggregated importances.
-#'     \describe{
-#'         \item{\var{improvements}}{Long format \code{tibble} with measurements
-#'             of performance for each \var{target} and each \var{sample}.
-#'             Available performance measures are RMSE and variance explained
-#'             (R2) for a model containing only an intrinsic view
-#'             (\var{intra.RMSE}, \var{intra.R2}), model with all views
-#'             (\var{multi.RMSE}, \var{multi.R2}), gain of RMSE and gain of
-#'             variance explained of multi-view model over the intrisic model
-#'             where \var{gain.RMSE} is the relative decrease of RMSE in percent,
-#'             while \var{gain.R2} is the absolute increase of variance explained
-#'             in percent. Each \var{value} represents the mean performance across
-#'             folds (k-fold cross-validation). The p values of a one sided
-#'             t-test of improvement of performance (\var{p.RMSE}, \var{p.R2})
-#'             are also available as a measure.}
-#'         \item{\var{improvements.stats}}{Long format \code{tibble} with summary
-#'             statistics (mean, standard deviation and coefficient of variation)
-#'             for all performance measures for each {target} over all samples.}
-#'         \item{\var{contributions}}{Long format \code{tibble} with the values
-#'             of the coefficients for each \var{view} in the meta-model, for each
-#'             \var{target} and each \var{sample}. The p values for the coefficient
-#'             for each view, under the null hypothesis of zero contribution to the
-#'             meta model are also available.}
-#'         \item{\var{contributions.stats}}{Long format \code{tibble} with summary
-#'             statistics for all views per target over all samples. Including
-#'             mean coffecient value, fraction of contribution, mean and standard
-#'             deviation of p values.}
-#'         \item{\var{importances}}{List of view-specific predictor-target
-#'         importance tables per sample. The importances in each table are
-#'         standardized per target and weighted by the quantile of the coefficient
-#'         for the target in that view. Columns other than \var{Predictor}
-#'         represent target markers.}
-#'         \item{\var{importances.aggregated}}{A list of aggregated view-specific
-#'         predictor-target importance tables . Aggregation is
-#'         reducing by mean over all samples.}
-#'     }
+#' @return A list containing the following elements:
+#' \describe{
+#'   \item{\var{improvements}}{A \code{tibble} with performance measurements for each \var{target} and \var{sample}.}
+#'   \item{\var{contributions}}{A \code{tibble} with coefficients and p-values for each \var{view}, \var{target}, and \var{sample}.}
+#'   \item{\var{importances}}{A \code{tibble} with standardized and weighted predictor-target importances for each \var{view}, \var{target}, and \var{sample}.}
+#' }
 #'
-#' @seealso \code{\link{run_misty}()} to train models and
-#'     generate results.
-#'
-#' @examples
-#' # Train and collect results for 3 samples in synthetic
-#'
-#' library(dplyr)
-#' library(purrr)
-#'
-#' data("synthetic")
-#'
-#' synthetic[seq_len(3)] %>%
-#'   iwalk(~ create_initial_view(.x %>% select(-c(row, col, type))) %>%
-#'     add_paraview(.x %>% select(row, col), l = 10) %>%
-#'     run_misty(paste0("results/", .y), "example.sqm"))
-#' misty.results <- collect_results("example.sqm")
-#' str(misty.results)
-#' @export
-collect_results <- function(db.file, sample.pattern = ".") {
+#' @seealso \code{\link{collect_results}()} for collecting and aggregating results.
+#' @export 
+collect_raw_results <- function(db.file, sample.pattern = ".", ...){
+
   sqm <- DBI::dbConnect(RSQLite::SQLite(), db.file)
 
   message("\nCollecting improvements")
@@ -170,61 +219,95 @@ collect_results <- function(db.file, sample.pattern = ".") {
   DBI::dbDisconnect(sqm)
   rm(sqm)
 
-  samples <- raw.importances %>%
-    dplyr::pull(sample) %>%
-    unique()
+  message("\n\tProcessing importances")
+  importances <- process_importances(raw.importances, contributions, ...)
 
-  importances <- samples %>% furrr::future_map_dfr(function(s) {
-    views <- raw.importances %>%
-      dplyr::filter(sample == s) %>%
-      dplyr::pull(view) %>%
-      unique()
+  raw.results <- list(
+      improvements = improvements,
+      contributions = contributions,
+      importances = importances
+  )
+
+  return(raw.results)
+}
 
 
-    views %>% purrr::map_dfr(function(v) {
-      pvalues <- contributions %>%
-        dplyr::filter(sample == s, view == paste0("p.", v)) %>%
-        dplyr::mutate(value = 1 - value)
-
-      target.pvalues <- pvalues %>% dplyr::pull(value)
-      names(target.pvalues) <- pvalues %>% dplyr::pull(target)
-
-      predictors <- raw.importances %>%
-        dplyr::filter(view == v) %>%
-        dplyr::pull(Predictor) %>%
-        unique()
-
-      targets <- raw.importances %>%
-        dplyr::filter(sample == s, view == v) %>%
-        dplyr::pull(Target) %>%
-        unique()
-
-      targets %>% purrr::map_dfr(function(t) {
-        dummy.tibble <- tibble::tibble(
-          sample = s, view = v,
-          Predictor = predictors, Target = t
-        )
-        raw.importances %>%
-          dplyr::filter(sample == s, view == v, Target == t) %>%
-          dplyr::right_join(
-            dummy.tibble,
-            dplyr::join_by(sample, view, Predictor, Target)
-          ) %>%
-          dplyr::mutate(Importance = ifelse(is.na(Importance), 0, Importance)) %>%
-          dplyr::mutate(Importance = scale(Importance)[, 1] * target.pvalues[t])
-      })
-    })
-  }, .progress = TRUE)
+#' Collect and aggregate results
+#'
+#' Collect and aggregate performance, contribution and importance estimations
+#' of a set of raw results produced by \code{\link{run_misty}()}.
+#'
+#' @param db.file path to database file with raw results from
+#'     \code{\link{run_misty}()}.
+#' @param sample.pattern a regex pattern to match sample names.
+#' @param ... additional arguments passed to \code{\link{process_importances}()}
+#'
+#' @return List of collected performance, contributions and importances per sample,
+#'     performance and contribution statistics and aggregated importances.
+#'     \describe{
+#'         \item{\var{improvements}}{Long format \code{tibble} with measurements
+#'             of performance for each \var{target} and each \var{sample}.
+#'             Available performance measures are RMSE and variance explained
+#'             (R2) for a model containing only an intrinsic view
+#'             (\var{intra.RMSE}, \var{intra.R2}), model with all views
+#'             (\var{multi.RMSE}, \var{multi.R2}), gain of RMSE and gain of
+#'             variance explained of multi-view model over the intrisic model
+#'             where \var{gain.RMSE} is the relative decrease of RMSE in percent,
+#'             while \var{gain.R2} is the absolute increase of variance explained
+#'             in percent. Each \var{value} represents the mean performance across
+#'             folds (k-fold cross-validation). The p values of a one sided
+#'             t-test of improvement of performance (\var{p.RMSE}, \var{p.R2})
+#'             are also available as a measure.}
+#'         \item{\var{improvements.stats}}{Long format \code{tibble} with summary
+#'             statistics (mean, standard deviation and coefficient of variation)
+#'             for all performance measures for each {target} over all samples.}
+#'         \item{\var{contributions}}{Long format \code{tibble} with the values
+#'             of the coefficients for each \var{view} in the meta-model, for each
+#'             \var{target} and each \var{sample}. The p values for the coefficient
+#'             for each view, under the null hypothesis of zero contribution to the
+#'             meta model are also available.}
+#'         \item{\var{contributions.stats}}{Long format \code{tibble} with summary
+#'             statistics for all views per target over all samples. Including
+#'             mean coffecient value, fraction of contribution, mean and standard
+#'             deviation of p values.}
+#'         \item{\var{importances}}{List of view-specific predictor-target
+#'         importance tables per sample. The importances in each table are
+#'         standardized per target and weighted by the quantile of the coefficient
+#'         for the target in that view. Columns other than \var{Predictor}
+#'         represent target markers.} See \code{\link{process_importances}()} 
+#'         for more details on how the importances are calculated and additional parameters.
+#'         \item{\var{importances.aggregated}}{A list of aggregated view-specific
+#'         predictor-target importance tables . Aggregation is
+#'         reducing by mean over all samples.}
+#'     }
+#'
+#' @seealso \code{\link{run_misty}()} to train models and
+#'     generate results.
+#'
+#' @examples
+#' # Train and collect results for 3 samples in synthetic
+#'
+#' library(dplyr)
+#' library(purrr)
+#'
+#' data("synthetic")
+#'
+#' synthetic[seq_len(3)] %>%
+#'   iwalk(~ create_initial_view(.x %>% select(-c(row, col, type))) %>%
+#'     add_paraview(.x %>% select(row, col), l = 10) %>%
+#'     run_misty(paste0("results/", .y), "example.sqm"))
+#' misty.results <- collect_results("example.sqm")
+#' str(misty.results)
+#' @export
+collect_results <- function(db.file, sample.pattern = ".", ...) {
+  
+  raw.results <- collect_raw_results(db.file, sample.pattern, ...)
 
   message("\nAggregating")
 
   misty.results <- c(
-    list(
-      improvements = improvements,
-      contributions = contributions,
-      importances = importances
-    ),
-    aggregate_results(improvements, contributions, importances)
+    raw.results,
+    aggregate_results(raw.results$improvements, raw.results$contributions, raw.results$importances)
   )
 
   return(misty.results)
@@ -561,4 +644,35 @@ folders_to_sqm <- function(folders, db.file, append = TRUE) {
   })
 
   DBI::dbDisconnect(sqm)
+}
+
+#' Filter raw results by pattern
+#'
+#' Helper function that filters the components of raw results based on a regular expression pattern.
+#' Filters the improvements, contributions, and importances components of the raw results.
+#'
+#' @param raw.results A list containing the raw results from \code{\link{collect_raw_results}()}.
+#' @param pattern A regular expression pattern to filter the results. Defaults to "." (matches all).
+#' @param col The column name to apply the filter pattern on. Defaults to "sample".
+#'
+#' @return A filtered list with raw results
+#'
+#' @seealso \code{\link{collect_raw_results}()} to collect raw results.
+#'
+#' @noRd
+filter_raw_results <- function(raw.results, pattern = ".", col = "sample") {
+
+  filtered.results <- list("improvements", "contributions", "importances") %>% purrr::map(function(name) {
+    raw.results[[name]] %>%
+      dplyr::filter(stringr::str_detect(!!as.symbol(col), pattern))
+  })
+
+  filtered.results %>% purrr::walk(function(df) {
+    if (nrow(df) == 0) {
+      # throw error
+      stop("pattern does not match anything in the results database")
+    }
+  })
+
+  return(filtered.results)
 }
